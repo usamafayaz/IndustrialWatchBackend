@@ -6,7 +6,7 @@ from sqlalchemy.ext.declarative import declarative_base
 class DBHandler:
     Base = declarative_base()
     server = 'GAREEBOOO'
-    database = 'IndustrialWatch'
+    database = 'IndustrialWatchFYP'
     username = 'sa'
     password = '1234'
 
