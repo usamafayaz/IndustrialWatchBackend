@@ -8,3 +8,4 @@ class MaterialInProduct(Base):
     product_number = Column(String(40))
     raw_material_id = Column(Integer)
     quantity = Column(Integer)
+    unit = Column(String(20))

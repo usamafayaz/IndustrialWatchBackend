@@ -62,6 +62,7 @@ def add_product(data):
                     product_number=product.product_number,
                     raw_material_id=material['raw_material_id'],
                     quantity=material['quantity'],
+                    unit=material['unit']
                 )
                 session.add(mat)
                 session.commit()
