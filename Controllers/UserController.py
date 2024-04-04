@@ -19,7 +19,7 @@ def insert_user(data):
 def get_all_user():
     with DBHandler.return_session() as session:
         users = session.scalars(select(User))
-        serialize_user = [{'id': user.id, 'name': user.username, 'role': user.role} for user in users]
+        serialize_user = [{'id': user.id, 'name': user.name, 'role': user.role} for user in users]
         return serialize_user
 
 
