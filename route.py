@@ -11,9 +11,10 @@ def add_raw_material():
     response = ProductionController.add_raw_material(request.args.get('name'))
     return response
 
+
 @app.route('/api/Production/UpdateRawMaterial', methods=['PUT'])
-def edit_raw_material():
-    response = ProductionController.edit_raw_material(request.get_json())
+def update_raw_material():
+    response = ProductionController.update_raw_material(request.get_json())
     return response
 
 
@@ -43,6 +44,13 @@ def add_stock():
     return response
 
 
+@app.route('/api/Production/AddBatch', methods=['POST'])
+def add_batch():
+    data = request.get_json()
+    response = ProductionController.add_batch(data)
+    return response
+
+
 @app.route('/api/Production/GetAllInventory', methods=['GET'])
 def get_all_inventory():
     response = ProductionController.get_all_inventory()
@@ -55,6 +63,7 @@ def get_detail_of_raw_material():
     raw_material_id = int(raw_material_id)
     response = ProductionController.get_detail_of_raw_material(raw_material_id)
     return response
+
 
 @app.route('/api/Production/GetAllBatch', methods=['GET'])
 def get_all_batch():
@@ -103,32 +112,31 @@ def login():
 
 
 #####################  Supervisor Controller  #################################
-
-@app.route('/api/Supervisor/GetAllSupervisor', methods=['get'])
-def get_all_supervisors():
-    response = SupervisorController.get_all_supervisors()
-    return response
-
-
-@app.route('/api/Supervisor/InsertSupervisor', methods=['post'])
-def insert_supervisor():
-    data = request.get_json()
-    response = SupervisorController.insert_supervisor(data)
-    return response
-
-
-@app.route('/api/Supervisor/DeleteSupervisor', methods=['delete'])
-def DeleteSupervisor():
-    response = SupervisorController.delete_supervisor(request.args.get('id'))
-    return response
-
-
-@app.route('/api/Supervisor/UpdateSupervisor', methods=['put'])
-def update_supervisor():
-    data = request.get_json()
-    response = SupervisorController.update_supervisor(data)
-    return response
-
+#
+# @app.route('/api/Supervisor/GetAllSupervisor', methods=['get'])
+# def get_all_supervisors():
+#     response = SupervisorController.get_all_supervisors()
+#     return response
+#
+#
+# @app.route('/api/Supervisor/InsertSupervisor', methods=['post'])
+# def insert_supervisor():
+#     data = request.get_json()
+#     response = SupervisorController.insert_supervisor(data)
+#     return response
+#
+#
+# @app.route('/api/Supervisor/DeleteSupervisor', methods=['delete'])
+# def DeleteSupervisor():
+#     response = SupervisorController.delete_supervisor(request.args.get('id'))
+#     return response
+#
+#
+# @app.route('/api/Supervisor/UpdateSupervisor', methods=['put'])
+# def update_supervisor():
+#     data = request.get_json()
+#     response = SupervisorController.update_supervisor(data)
+#     return response
 
 
 if __name__ == '__main__':

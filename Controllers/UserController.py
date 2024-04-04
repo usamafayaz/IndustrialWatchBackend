@@ -10,17 +10,23 @@ from sqlalchemy.orm import Session
 
 def insert_user(data):
     with DBHandler.return_session() as session:
-        user = User(data['name'], data['name'], data.get('role'))
-        session.add(user)
-        session.commit()
-        return f'{user.username} Inserted Successfully'
+        try:
+            user = User(data['name'], data['name'], data.get('role'))
+            session.add(user)
+            session.commit()
+            return jsonify({'message': 'Inserted Successfully'}), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
 
 
 def get_all_user():
     with DBHandler.return_session() as session:
-        users = session.scalars(select(User))
-        serialize_user = [{'id': user.id, 'name': user.name, 'role': user.role} for user in users]
-        return serialize_user
+        try:
+            users = session.scalars(select(User))
+            serialize_user = [{'id': user.id, 'name': user.name, 'role': user.role} for user in users]
+            return jsonify(serialize_user), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
 
 
 #
@@ -29,9 +35,9 @@ def get_user(user_id):
         try:
             user = session.scalars(select(User).where(User.id == user_id)).one()
             user_serialized = {'id': user.id, 'name': user.username, 'role': user.role}
-            return user_serialized
+            return jsonify(user_serialized), 200
         except Exception as e:
-            return {'message': 'Error Try Again'}
+            return jsonify({'message': str(e)}), 500
 
 
 def update_user(data):
@@ -43,9 +49,9 @@ def update_user(data):
             user.role = data.get('role')
             session.commit()
             serialized_user = {'id': user.id, 'name': user.username, 'password': user.password, 'role': user.role}
-            return serialized_user
+            return jsonify(serialized_user),200
         except Exception as e:
-            return {'message', 'Error Try Again'}
+            return jsonify({'message': str(e)}), 500
 
 
 def delete_user(user_id):
@@ -54,9 +60,9 @@ def delete_user(user_id):
             user = session.scalars(select(User).where(User.id == user_id)).one()
             session.delete(user)
             session.commit()
-            return {'message': 'User Has been Deleted'}
+            return jsonify({'message': 'User Has been Deleted'}), 200
         except Exception as e:
-            return {'message': 'Error Try again'}
+            return jsonify({'message': str(e)}), 500
 
 
 def login(username, password):
@@ -74,6 +80,6 @@ def login(username, password):
             }
             return jsonify(user_data), 200
         else:
-            return {"message": "User not found or incorrect credentials"}, 404
+            return jsonify({"message": "User not found or incorrect credentials"}), 404
     except Exception as e:
-        return {"error":str(e)},500
+        return {"error": str(e)}, 500
