@@ -11,3 +11,8 @@ def get_formatted_number(type):
 
 def get_current_date():
     return datetime.now().strftime("%x")
+
+def get_first_three_characters(value):
+    if len(value)>=3:
+        return value[0:3]
+

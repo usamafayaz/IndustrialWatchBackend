@@ -2,13 +2,15 @@ import datetime
 import time
 
 from flask import jsonify
-from sqlalchemy import select, func
+from sqlalchemy import select, func, join, outerjoin
 
 import DBHandler
 import Util
 from Models.RawMaterial import RawMaterial
 from Models.Product import Product
-from Models.MaterialInProduct import MaterialInProduct
+from Models.ProductFormula import ProductFormula
+from Models.ProductLink import ProductLink
+
 from Models.StockInBatch import StockInBatch
 from Models.Stock import Stock
 from Models.Batch import Batch
@@ -48,9 +50,9 @@ def get_all_raw_materials():
 def add_product(data):
     with DBHandler.return_session() as session:
         try:
-            product = Product(name=data['name'], rejection_tolerance=data['rejection_tolerance'],
+            product = Product(name=data['name'],
                               inspection_angles=data['inspection_angles'],
-                              product_number=Util.get_formatted_number('P'))
+                              product_number=Util.get_formatted_number(Util.get_first_three_characters(data['name'])))
             session.add(product)
             session.commit()
             product = session.query(Product).where(Product.name == product.name).first()
@@ -58,7 +60,7 @@ def add_product(data):
                 return jsonify({'message': 'An Error Occurred while adding the Product!'}), 500
             materials = data['materials']
             for material in materials:
-                mat = MaterialInProduct(
+                mat = ProductFormula(
                     product_number=product.product_number,
                     raw_material_id=material['raw_material_id'],
                     quantity=material['quantity'],
@@ -75,8 +77,8 @@ def add_batch(data):
     with DBHandler.return_session() as session:
         try:
             for i in range(0, int(data["batch_per_day"])):
-                batch = Batch(batch_number=Util.get_formatted_number('B'), product_number=data["product_number"],
-                              pack_per_batch=data["pack_per_batch"], piece_per_pack=data["piece_per_pack"])
+                batch = Batch(batch_number=Util.get_formatted_number('B'), product_link_id=data["product_link_id"],
+                              manufacturing_date=Util.get_current_date())
                 session.add(batch)
                 stocks = data["stock_list"]
                 for stock in stocks:
@@ -86,12 +88,19 @@ def add_batch(data):
                     )
                     session.add(st)
                 session.commit()
-                time.sleep(10)
+                time.sleep(7)
             return jsonify({'message': 'Batch Added Successfully'})
         except Exception as e:
             return jsonify({'message': str(e)})
 
-
+def get_all_batches(product_link_id):
+    with DBHandler.return_session() as session:
+        try:
+            batches=session.scalars(select(Batch).where(Batch.product_link_id==product_link_id)).all()
+            serialize_batches=[{'batch_number':batch.batch_number, 'status':0} for batch in batches]
+            return jsonify(serialize_batches), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
 def get_all_products():
     with DBHandler.return_session() as session:
         try:
@@ -102,30 +111,73 @@ def get_all_products():
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
-
-def get_all_batch():
+def get_formula_of_product(product_number):
     with DBHandler.return_session() as session:
         try:
-            batches = session.scalars(select(Batch)).all()
-            serialized_batches = [{'batch_number': batch.batch_number,
-                                   'product_number': batch.product_number,
-                                   'pack_per_batch': batch.pack_per_batch,
-                                   'piece_per_pack': batch.piece_per_pack,
-                                   'batch_per_day': batch.batch_per_day} for batch in batches]
-            return jsonify(serialized_batches), 200
+            raw_materials = (
+                session.query(RawMaterial)
+                .join(ProductFormula, ProductFormula.raw_material_id == RawMaterial.id)
+                .filter(ProductFormula.product_number == product_number)
+                .all()
+            )
+            serialize_raw_materials=[{'raw_material_id':material.id,'name':material.name,'quantity':'0 KG'} for material in raw_materials]
+            return jsonify(serialize_raw_materials), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+def get_linked_products():
+    with DBHandler.return_session() as session:
+        try:
+            products = session.execute(
+                select(Product)
+                .select_from(
+                    join(Product, ProductLink, Product.product_number == ProductLink.product_number)
+                )
+            ).scalars().all()
+            serialized_products = [{'product_number': product.product_number, 'name': product.name} for product in
+                                   products]
+            return jsonify(serialized_products), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
+def get_unlinked_products():
+    with DBHandler.return_session() as session:
+        try:
+            products = session.execute(
+                select(Product)
+                .select_from(
+                    outerjoin(Product, ProductLink, Product.product_number == ProductLink.product_number)
+                )
+                .where(ProductLink.product_number == None)
+
+            ).scalars().all()
+            serialized_products = [{'product_number': product.product_number, 'name': product.name} for product in
+                                   products]
+            return jsonify(serialized_products), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+
+def link_product(data):
+    with DBHandler.return_session() as session:
+        try:
+            product=ProductLink(**data)
+            session.add(product)
+            session.commit()
+            return jsonify({'message': 'Product Linked Successfully'})
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
 
 def add_stock(data):
     with DBHandler.return_session() as session:
         try:
             stock = Stock(**data)
-            stock.stock_number = Util.get_formatted_number('S')
-            stock.purchased_date = Util.get_current_date()
-            session.add(stock)
-            session.commit()
-            return jsonify({'message': 'Stock Added Successfully'}), 200
+            rawMaterial = session.query(RawMaterial).filter(RawMaterial.id == data['raw_material_id']).first()
+            if rawMaterial:
+                stock.stock_number = Util.get_formatted_number(Util.get_first_three_characters(rawMaterial.name))
+                stock.purchased_date = Util.get_current_date()
+                session.add(stock)
+                session.commit()
+                return jsonify({'message': 'Stock Added Successfully'}), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
@@ -149,13 +201,13 @@ def get_all_inventory():
 def get_detail_of_raw_material(id):
     with DBHandler.return_session() as session:
         try:
-            purchase_history = session.query(Stock.stock_number,Stock.purchased_date, Stock.quantity, Stock.price_per_unit) \
+            purchase_history = session.query(Stock.stock_number,Stock.purchased_date, Stock.quantity, Stock.price_per_kg) \
                 .filter(Stock.raw_material_id == id) \
                 .all()
 
             serialized_purchase_history = [
                 {'stock_number':id,'purchased_date': datetime.datetime.strptime(str(date), "%Y-%m-%d").strftime("%x"),
-                 'quantity': quantity, 'price_per_unit': price}
+                 'quantity': quantity, 'price_per_kg': price}
                 for id, date, quantity, price in purchase_history]
 
             return jsonify(serialized_purchase_history), 200
