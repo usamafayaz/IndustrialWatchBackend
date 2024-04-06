@@ -149,14 +149,14 @@ def get_all_inventory():
 def get_detail_of_raw_material(id):
     with DBHandler.return_session() as session:
         try:
-            purchase_history = session.query(Stock.purchased_date, Stock.quantity, Stock.price_per_unit) \
+            purchase_history = session.query(Stock.stock_number,Stock.purchased_date, Stock.quantity, Stock.price_per_unit) \
                 .filter(Stock.raw_material_id == id) \
                 .all()
 
             serialized_purchase_history = [
-                {'purchased_date': datetime.datetime.strptime(str(date), "%Y-%m-%d").strftime("%x"),
+                {'stock_number':id,'purchased_date': datetime.datetime.strptime(str(date), "%Y-%m-%d").strftime("%x"),
                  'quantity': quantity, 'price_per_unit': price}
-                for date, quantity, price in purchase_history]
+                for id, date, quantity, price in purchase_history]
 
             return jsonify(serialized_purchase_history), 200
         except Exception as e:
