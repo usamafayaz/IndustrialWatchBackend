@@ -1,4 +1,4 @@
-from sqlalchemy import Column,Integer,String, Float
+from sqlalchemy import Column,Integer,String, Float,Date
 from DBHandler import DBHandler
 Base = DBHandler.Base
 
@@ -7,6 +7,6 @@ class Stock(Base):
     stock_number = Column(String(40), primary_key=True)
     raw_material_id = Column(Integer)
     quantity = Column(Integer)
-    unit = Column(String(5))
-    price_per_unit = Column(Integer)
-    purchased_date = Column(String(50))
+    price_per_kg = Column(Float)
+    purchased_date = Column(Date)
+

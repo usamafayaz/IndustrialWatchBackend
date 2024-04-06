@@ -7,4 +7,3 @@ class StockInBatch(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     stock_number = Column(String(40))
     batch_number = Column(String(40))
-
