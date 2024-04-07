@@ -64,8 +64,8 @@ def add_batch():
 
 @app.route('/api/Production/GetAllBatches', methods=['GET'])
 def get_all_batches():
-    product_link_id=request.args.get('product_link_id')
-    response = ProductionController.get_all_batches(product_link_id)
+    product_number = request.args.get('product_number')
+    response = ProductionController.get_all_batches(product_number)
     return response
 
 @app.route('/api/Production/GetFormulaOfProduct', methods=['GET'])

@@ -88,18 +88,27 @@ def add_batch(data):
                     )
                     session.add(st)
                 session.commit()
-                time.sleep(7)
+                time.sleep(3)
             return jsonify({'message': 'Batch Added Successfully'})
         except Exception as e:
             return jsonify({'message': str(e)})
 
-def get_all_batches(product_link_id):
+def get_all_batches(product_number):
     with DBHandler.return_session() as session:
         try:
-            batches=session.scalars(select(Batch).where(Batch.product_link_id==product_link_id)).all()
-            serialize_batches=[{'batch_number':batch.batch_number, 'status':0} for batch in batches]
+            # Assuming you have defined your models and relationships properly
+            batches = (
+                session.query(Batch)
+                .join(ProductLink, Batch.product_link_id == ProductLink.id)
+                .filter(ProductLink.product_number == product_number)
+                .all()
+            )
+            # Serialize batches into a dictionary
+            serialize_batches = [{'batch_number': batch.batch_number, 'status': 0} for batch in batches]
+            # Convert the serialized batches to JSON and return with status code 200
             return jsonify(serialize_batches), 200
         except Exception as e:
+            # If an exception occurs, return an error message with status code 500
             return jsonify({'message': str(e)}), 500
 def get_all_products():
     with DBHandler.return_session() as session:
