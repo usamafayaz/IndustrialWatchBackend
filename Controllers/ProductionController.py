@@ -3,6 +3,7 @@ import time
 
 from flask import jsonify
 from sqlalchemy import select, func, join, outerjoin
+from sqlalchemy.orm import joinedload
 
 import DBHandler
 import Util
@@ -93,23 +94,69 @@ def add_batch(data):
         except Exception as e:
             return jsonify({'message': str(e)})
 
+
 def get_all_batches(product_number):
     with DBHandler.return_session() as session:
         try:
-            # Assuming you have defined your models and relationships properly
             batches = (
-                session.query(Batch)
+                session.query(Batch, ProductLink)
                 .join(ProductLink, Batch.product_link_id == ProductLink.id)
                 .filter(ProductLink.product_number == product_number)
                 .all()
             )
-            # Serialize batches into a dictionary
-            serialize_batches = [{'batch_number': batch.batch_number, 'status': 0} for batch in batches]
-            # Convert the serialized batches to JSON and return with status code 200
+            serialize_batches = []
+            for batch, product_link in batches:
+                batch_yield = batch.batch_yield
+                rejection_tolerance = product_link.rejection_tolerance
+                if (100 - batch_yield) > rejection_tolerance:
+                    status = 1
+                else:
+                    status = 0
+
+                serialize_batches.append({
+                    'batch_number': batch.batch_number,
+                    'status': status
+                })
+
             return jsonify(serialize_batches), 200
         except Exception as e:
-            # If an exception occurs, return an error message with status code 500
             return jsonify({'message': str(e)}), 500
+
+
+def get_batch(batch_number):
+    with DBHandler.return_session() as session:
+        try:
+            batch = (
+                session.query(Batch).filter(Batch.batch_number == batch_number)
+                .one()
+            )
+
+            productLink = (
+                session.query(ProductLink).filter(ProductLink.id == batch.product_link_id).one()
+            )
+
+            batch_yield = batch.batch_yield
+            rejection_tolerance = productLink.rejection_tolerance
+            if (100 - batch_yield) > rejection_tolerance:
+                status = 1
+            else:
+                status = 0
+
+            serialize_batch = {
+                'batch_number': batch.batch_number,
+                'status': status,
+                'date': datetime.datetime.strptime(str(batch.manufacturing_date), "%Y-%m-%d").strftime("%x"),
+                'total_piece': '',
+                'defected_piece': '',
+                'rejection_tolerance': productLink.rejection_tolerance,
+                'batch_yield': batch.batch_yield
+            }
+
+            return jsonify(serialize_batch), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+
 def get_all_products():
     with DBHandler.return_session() as session:
         try:
@@ -120,6 +167,7 @@ def get_all_products():
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
+
 def get_formula_of_product(product_number):
     with DBHandler.return_session() as session:
         try:
@@ -129,10 +177,13 @@ def get_formula_of_product(product_number):
                 .filter(ProductFormula.product_number == product_number)
                 .all()
             )
-            serialize_raw_materials=[{'raw_material_id':material.id,'name':material.name,'quantity':'0 KG'} for material in raw_materials]
+            serialize_raw_materials = [{'raw_material_id': material.id, 'name': material.name, 'quantity': '0 KG'} for
+                                       material in raw_materials]
             return jsonify(serialize_raw_materials), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
+
 def get_linked_products():
     with DBHandler.return_session() as session:
         try:
@@ -147,6 +198,7 @@ def get_linked_products():
             return jsonify(serialized_products), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
 
 def get_unlinked_products():
     with DBHandler.return_session() as session:
@@ -169,12 +221,13 @@ def get_unlinked_products():
 def link_product(data):
     with DBHandler.return_session() as session:
         try:
-            product=ProductLink(**data)
+            product = ProductLink(**data)
             session.add(product)
             session.commit()
             return jsonify({'message': 'Product Linked Successfully'})
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
 
 def add_stock(data):
     with DBHandler.return_session() as session:
@@ -210,12 +263,13 @@ def get_all_inventory():
 def get_detail_of_raw_material(id):
     with DBHandler.return_session() as session:
         try:
-            purchase_history = session.query(Stock.stock_number,Stock.purchased_date, Stock.quantity, Stock.price_per_kg) \
+            purchase_history = session.query(Stock.stock_number, Stock.purchased_date, Stock.quantity,
+                                             Stock.price_per_kg) \
                 .filter(Stock.raw_material_id == id) \
                 .all()
 
             serialized_purchase_history = [
-                {'stock_number':id,'purchased_date': datetime.datetime.strptime(str(date), "%Y-%m-%d").strftime("%x"),
+                {'stock_number': id, 'purchased_date': datetime.datetime.strptime(str(date), "%Y-%m-%d").strftime("%x"),
                  'quantity': quantity, 'price_per_kg': price}
                 for id, date, quantity, price in purchase_history]
 

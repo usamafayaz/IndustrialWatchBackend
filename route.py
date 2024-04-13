@@ -68,6 +68,12 @@ def get_all_batches():
     response = ProductionController.get_all_batches(product_number)
     return response
 
+@app.route('/api/Production/GetBatch', methods=['GET'])
+def get_batch():
+    batch_number = request.args.get('batch_number')
+    response = ProductionController.get_batch(batch_number)
+    return response
+
 @app.route('/api/Production/GetFormulaOfProduct', methods=['GET'])
 def get_formula_of_product():
     product_number=request.args.get('product_number')
@@ -85,6 +91,7 @@ def get_detail_of_raw_material():
     raw_material_id = int(raw_material_id)
     response = ProductionController.get_detail_of_raw_material(raw_material_id)
     return response
+
 
 #####################  User Controller  #################################
 @app.route('/api/User/InsertUser', methods=['POST'])
@@ -124,33 +131,6 @@ def delete_user():
 def login():
     response = UserController.login(username=request.args.get('username'), password=request.args.get('password'))
     return response
-
-#####################  Supervisor Controller  #################################
-#
-# @app.route('/api/Supervisor/GetAllSupervisor', methods=['get'])
-# def get_all_supervisors():
-#     response = SupervisorController.get_all_supervisors()
-#     return response
-#
-#
-# @app.route('/api/Supervisor/InsertSupervisor', methods=['post'])
-# def insert_supervisor():
-#     data = request.get_json()
-#     response = SupervisorController.insert_supervisor(data)
-#     return response
-#
-#
-# @app.route('/api/Supervisor/DeleteSupervisor', methods=['delete'])
-# def DeleteSupervisor():
-#     response = SupervisorController.delete_supervisor(request.args.get('id'))
-#     return response
-#
-#
-# @app.route('/api/Supervisor/UpdateSupervisor', methods=['put'])
-# def update_supervisor():
-#     data = request.get_json()
-#     response = SupervisorController.update_supervisor(data)
-#     return response
 
 
 if __name__ == '__main__':
