@@ -1,7 +1,8 @@
 import os
 from Controllers import ProductionController, UserController
 from flask import Flask, jsonify, request, send_from_directory
-import  Util
+import Util
+
 app = Flask(__name__)
 
 
@@ -10,6 +11,7 @@ app = Flask(__name__)
 def add_raw_material():
     response = ProductionController.add_raw_material(request.args.get('name'))
     return response
+
 
 @app.route('/api/Production/UpdateRawMaterial', methods=['PUT'])
 def update_raw_material():
@@ -29,20 +31,24 @@ def add_product():
     response = ProductionController.add_product(data)
     return response
 
+
 @app.route('/api/Production/GetAllProducts', methods=['GET'])
 def get_all_products():
     response = ProductionController.get_all_products()
     return response
+
 
 @app.route('/api/Production/GetLinkedProducts', methods=['GET'])
 def get_linked_products():
     response = ProductionController.get_linked_products()
     return response
 
+
 @app.route('/api/Production/GetUnlinkedProducts', methods=['GET'])
 def get_unlinked_products():
     response = ProductionController.get_unlinked_products()
     return response
+
 
 @app.route('/api/Production/LinkProduct', methods=['POST'])
 def link_product():
@@ -50,11 +56,13 @@ def link_product():
     response = ProductionController.link_product(data)
     return response
 
+
 @app.route('/api/Production/AddStock', methods=['POST'])
 def add_stock():
     data = request.get_json()
     response = ProductionController.add_stock(data)
     return response
+
 
 @app.route('/api/Production/AddBatch', methods=['POST'])
 def add_batch():
@@ -62,11 +70,13 @@ def add_batch():
     response = ProductionController.add_batch(data)
     return response
 
+
 @app.route('/api/Production/GetAllBatches', methods=['GET'])
 def get_all_batches():
     product_number = request.args.get('product_number')
     response = ProductionController.get_all_batches(product_number)
     return response
+
 
 @app.route('/api/Production/GetBatch', methods=['GET'])
 def get_batch():
@@ -74,16 +84,19 @@ def get_batch():
     response = ProductionController.get_batch(batch_number)
     return response
 
+
 @app.route('/api/Production/GetFormulaOfProduct', methods=['GET'])
 def get_formula_of_product():
-    product_number=request.args.get('product_number')
+    product_number = request.args.get('product_number')
     response = ProductionController.get_formula_of_product(product_number)
     return response
+
 
 @app.route('/api/Production/GetAllInventory', methods=['GET'])
 def get_all_inventory():
     response = ProductionController.get_all_inventory()
     return response
+
 
 @app.route('/api/Production/GetStockDetailOfRawMaterial', methods=['GET'])
 def get_detail_of_raw_material():
@@ -92,6 +105,19 @@ def get_detail_of_raw_material():
     response = ProductionController.get_detail_of_raw_material(raw_material_id)
     return response
 
+
+@app.route('/api/Production/GetAllDefectedImages', methods=['GET'])
+def get_all_defected_images():
+    folder_path = 'defected_images'
+    response = ProductionController.get_all_images(folder_path)
+    return response
+
+@app.route('/api/Production/GetDefectedImagesOfBatch', methods=['GET'])
+def get_defected_images():
+    batch_number = request.args.get('batch_number')
+    folder_path = f'defected_images\\{batch_number}'
+    response = ProductionController.get_images(folder_path)
+    return response
 
 #####################  User Controller  #################################
 @app.route('/api/User/InsertUser', methods=['POST'])

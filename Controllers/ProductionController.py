@@ -3,8 +3,10 @@ import time
 
 from flask import jsonify
 from sqlalchemy import select, func, join, outerjoin
-from sqlalchemy.orm import joinedload
-
+import os
+import io
+from flask import send_file
+import zipfile
 import DBHandler
 import Util
 from Models.RawMaterial import RawMaterial
@@ -126,13 +128,12 @@ def get_all_batches(product_number):
 def get_batch(batch_number):
     with DBHandler.return_session() as session:
         try:
-            batch = (
-                session.query(Batch).filter(Batch.batch_number == batch_number)
-                .one()
-            )
 
-            productLink = (
-                session.query(ProductLink).filter(ProductLink.id == batch.product_link_id).one()
+            batch, productLink = (
+                session.query(Batch, ProductLink)
+                .join(ProductLink, ProductLink.id == Batch.product_link_id)
+                .filter(Batch.batch_number == batch_number)
+                .one()
             )
 
             batch_yield = batch.batch_yield
@@ -276,3 +277,43 @@ def get_detail_of_raw_material(id):
             return jsonify(serialized_purchase_history), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
+def get_all_images(folder_path):
+    try:
+        zip_buffer = io.BytesIO()
+
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, _, files in os.walk(folder_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    zip_file.write(file_path, os.path.relpath(file_path, folder_path))
+
+        zip_buffer.seek(0)
+
+        return send_file(zip_buffer, mimetype='application/zip', as_attachment=True,
+                         download_name=f"{folder_path}.zip")
+
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+def get_images(folder_path):
+    try:
+        if not os.path.exists(folder_path):
+            return jsonify({'message': 'Images not found'}), 404
+
+        zip_buffer = io.BytesIO()
+
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, _, files in os.walk(folder_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    zip_file.write(file_path, os.path.relpath(file_path, folder_path))
+
+        zip_buffer.seek(0)
+
+        return send_file(zip_buffer, mimetype='application/zip', as_attachment=True,
+                         download_name=f"{folder_path.split(os.path.sep)[-1]}.zip")
+
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
