@@ -278,6 +278,7 @@ def get_detail_of_raw_material(id):
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
+
 def get_all_images(folder_path):
     try:
         zip_buffer = io.BytesIO()
@@ -300,7 +301,7 @@ def get_all_images(folder_path):
 def get_images(folder_path):
     try:
         if not os.path.exists(folder_path):
-            return jsonify({'message': 'Images not found'}), 404
+            return jsonify({'message': 'Data not found'}), 404
 
         zip_buffer = io.BytesIO()
 
