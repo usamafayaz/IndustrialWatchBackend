@@ -82,19 +82,33 @@ def add_batch(data):
             for i in range(0, int(data["batch_per_day"])):
                 batch = Batch(batch_number=Util.get_formatted_number('B'), product_link_id=data["product_link_id"],
                               manufacturing_date=Util.get_current_date())
-                session.add(batch)
+                # session.add(batch)
                 stocks = data["stock_list"]
                 for stock in stocks:
-                    st = StockInBatch(
-                        batch_number=batch.batch_number,
-                        stock_number=stock["stock_number"]
-                    )
-                    session.add(st)
-                session.commit()
-                time.sleep(3)
-            return jsonify({'message': 'Batch Added Successfully'})
+                    raw_material_id = stock['raw_material_id']
+                    stock_numbers = stock['stocks']
+                    available_quantity = 0
+                    calculated_quantity = 0
+                    for number in stock_numbers:
+                        result =session.query(Stock,ProductFormula).join(ProductFormula, ProductFormula.raw_material_id == Stock.raw_material_id).filter(Stock.stock_number == number).first()
+                        st,pf = result
+
+                        available_quantity+=Util.convert_to_kg(pf.quantity,pf.unit)
+                    result = session.query(ProductLink).filter(ProductLink.id == data["product_link_id"]).first()
+                    total_products_in_batch = result.packs_per_batch * result.piece_per_pack * int(data['batch_per_day'])
+                    print("Billi ==>> ",total_products_in_batch)
+                    calculated_quantity = total_products_in_batch * available_quantity
+
+                #     st = StockInBatch(
+                #         batch_number=batch.batch_number,
+                #         stock_number=stock["stock_number"]
+                #     )
+                #     session.add(st)
+                # session.commit()
+                # time.sleep(3)
+            return jsonify({'message': 'Batch Added Successfully'}), 200
         except Exception as e:
-            return jsonify({'message': str(e)})
+            return jsonify({'message': str(e)}), 500
 
 
 def get_all_batches(product_number):
