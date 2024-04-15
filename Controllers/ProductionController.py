@@ -281,6 +281,9 @@ def get_detail_of_raw_material(id):
 
 def get_all_images(folder_path):
     try:
+        if not os.path.exists(folder_path):
+            return jsonify({'message': 'Data not found'}), 404
+
         zip_buffer = io.BytesIO()
 
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
@@ -290,9 +293,8 @@ def get_all_images(folder_path):
                     zip_file.write(file_path, os.path.relpath(file_path, folder_path))
 
         zip_buffer.seek(0)
-
         return send_file(zip_buffer, mimetype='application/zip', as_attachment=True,
-                         download_name=f"{folder_path}.zip")
+                         download_name=f"{folder_path.split(os.path.sep)[1]}.zip"), 200
 
     except Exception as e:
         return jsonify({'message': str(e)}), 500
@@ -314,7 +316,7 @@ def get_images(folder_path):
         zip_buffer.seek(0)
 
         return send_file(zip_buffer, mimetype='application/zip', as_attachment=True,
-                         download_name=f"{folder_path.split(os.path.sep)[-1]}.zip")
+                         download_name=f"{folder_path.split(os.path.sep)[-1]}.zip"), 200
 
     except Exception as e:
         return jsonify({'message': str(e)}), 500

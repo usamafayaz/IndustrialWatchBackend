@@ -108,14 +108,16 @@ def get_detail_of_raw_material():
 
 @app.route('/api/Production/GetAllDefectedImages', methods=['GET'])
 def get_all_defected_images():
-    folder_path = 'defected_images'
+    product_number = request.args.get('product_number')
+    folder_path = f'defected_items\\{product_number}'
     response = ProductionController.get_all_images(folder_path)
     return response
 
 @app.route('/api/Production/GetDefectedImagesOfBatch', methods=['GET'])
 def get_defected_images():
+    product_number = request.args.get('product_number')
     batch_number = request.args.get('batch_number')
-    folder_path = f'defected_images\\{batch_number}'
+    folder_path = f'defected_items\\{product_number}\\{batch_number}'
     response = ProductionController.get_images(folder_path)
     return response
 
