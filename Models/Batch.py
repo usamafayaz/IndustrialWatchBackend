@@ -7,3 +7,4 @@ class Batch(Base):
     product_link_id = Column(Integer)
     manufacturing_date = Column(Date)
     batch_yield = Column(Float)
+    defected_pieces = Column(Integer)

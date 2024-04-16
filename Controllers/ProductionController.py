@@ -88,13 +88,18 @@ def add_batch(data):
                 total_stock = []
                 total_stock_quantity = 0
                 calculated_required_quantity = 0
+                result = session.query(ProductLink).filter(ProductLink.id == data["product_link_id"]).first()
+
                 for number in stock_numbers:
-                    result =session.query(Stock,ProductFormula).join(ProductFormula, ProductFormula.raw_material_id == Stock.raw_material_id).filter(Stock.stock_number == number).first()
-                    st,pf = result
+                    st_result = session.query(Stock, ProductFormula) \
+                        .join(ProductFormula, ProductFormula.raw_material_id == Stock.raw_material_id) \
+                        .filter(Stock.stock_number == number) \
+                        .filter(ProductFormula.product_number == result.product_number) \
+                        .first()
+                    st,pf = st_result
                     total_stock.append(st)
                     total_stock_quantity += st.quantity
-                    available_quantity+=Util.convert_to_kg(pf.quantity,pf.unit)
-                result = session.query(ProductLink).filter(ProductLink.id == data["product_link_id"]).first()
+                    available_quantity=Util.convert_to_kg(pf.quantity,pf.unit)
                 total_products_in_batch = result.packs_per_batch * result.piece_per_pack * int(data['batch_per_day'])
                 calculated_required_quantity = total_products_in_batch * available_quantity
                 if calculated_required_quantity > total_stock_quantity:
@@ -112,6 +117,7 @@ def add_batch(data):
                         st_in_batch = session.query(StockInBatch).filter(StockInBatch.stock_number == st.stock_number).first()
                         if st_in_batch != None:
                             session.delete(st_in_batch)
+                            session.commit()
                         session.delete(st)
                     session.commit()
 
@@ -183,7 +189,7 @@ def get_batch(batch_number):
                 'status': status,
                 'date': datetime.datetime.strptime(str(batch.manufacturing_date), "%Y-%m-%d").strftime("%x"),
                 'total_piece': '',
-                'defected_piece': '',
+                'defected_piece': batch.defected_pieces,
                 'rejection_tolerance': productLink.rejection_tolerance,
                 'batch_yield': batch.batch_yield
             }
