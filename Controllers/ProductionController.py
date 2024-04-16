@@ -90,13 +90,16 @@ def add_batch(data):
                     available_quantity = 0
                     calculated_quantity = 0
                     for number in stock_numbers:
-                        result =session.query(Stock,ProductFormula).join(ProductFormula, ProductFormula.raw_material_id == Stock.raw_material_id).filter(Stock.stock_number == number).first()
-                        st,pf = result
+                        result = session.query(Stock, ProductFormula).join(ProductFormula,
+                                                                           ProductFormula.raw_material_id == Stock.raw_material_id).filter(
+                            Stock.stock_number == number).first()
+                        st, pf = result
 
-                        available_quantity+=Util.convert_to_kg(pf.quantity,pf.unit)
+                        available_quantity += Util.convert_to_kg(pf.quantity, pf.unit)
                     result = session.query(ProductLink).filter(ProductLink.id == data["product_link_id"]).first()
-                    total_products_in_batch = result.packs_per_batch * result.piece_per_pack * int(data['batch_per_day'])
-                    print("Billi ==>> ",total_products_in_batch)
+                    total_products_in_batch = result.packs_per_batch * result.piece_per_pack * int(
+                        data['batch_per_day'])
+                    print("Billi ==>> ", total_products_in_batch)
                     calculated_quantity = total_products_in_batch * available_quantity
 
                 #     st = StockInBatch(
@@ -291,27 +294,6 @@ def get_detail_of_raw_material(id):
             return jsonify(serialized_purchase_history), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
-
-
-def get_all_images(folder_path):
-    try:
-        if not os.path.exists(folder_path):
-            return jsonify({'message': 'Data not found'}), 404
-
-        zip_buffer = io.BytesIO()
-
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            for root, _, files in os.walk(folder_path):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    zip_file.write(file_path, os.path.relpath(file_path, folder_path))
-
-        zip_buffer.seek(0)
-        return send_file(zip_buffer, mimetype='application/zip', as_attachment=True,
-                         download_name=f"{folder_path.split(os.path.sep)[1]}.zip"), 200
-
-    except Exception as e:
-        return jsonify({'message': str(e)}), 500
 
 
 def get_images(folder_path):
