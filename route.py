@@ -78,10 +78,10 @@ def get_all_batches():
     return response
 
 
-@app.route('/api/Production/GetBatch', methods=['GET'])
+@app.route('/api/Production/GetBatchDetails', methods=['GET'])
 def get_batch():
     batch_number = request.args.get('batch_number')
-    response = ProductionController.get_batch(batch_number)
+    response = ProductionController.get_batch_details(batch_number)
     return response
 
 
@@ -110,7 +110,7 @@ def get_detail_of_raw_material():
 def get_all_defected_images():
     product_number = request.args.get('product_number')
     folder_path = f'defected_items\\{product_number}'
-    response = ProductionController.get_images(folder_path)
+    response = ProductionController.get_defected_images(folder_path)
     return response
 
 @app.route('/api/Production/GetDefectedImagesOfBatch', methods=['GET'])
@@ -118,7 +118,7 @@ def get_defected_images():
     product_number = request.args.get('product_number')
     batch_number = request.args.get('batch_number')
     folder_path = f'defected_items\\{product_number}\\{batch_number}'
-    response = ProductionController.get_images(folder_path)
+    response = ProductionController.get_defected_images(folder_path)
     return response
 
 #####################  User Controller  #################################

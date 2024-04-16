@@ -82,7 +82,6 @@ def add_batch(data):
 
             stocks = data["stock_list"]
             for stock in stocks:
-                raw_material_id = stock['raw_material_id']
                 stock_numbers = stock['stocks']
                 available_quantity = 0
                 total_stock = []
@@ -151,22 +150,22 @@ def get_all_batches(product_number):
             for batch, product_link in batches:
                 batch_yield = batch.batch_yield
                 rejection_tolerance = product_link.rejection_tolerance
-                if (100 - batch_yield) > rejection_tolerance:
-                    status = 1
-                else:
-                    status = 0
-
-                serialize_batches.append({
-                    'batch_number': batch.batch_number,
-                    'status': status
-                })
+                if batch_yield !=None:
+                    if (100 - batch_yield) > rejection_tolerance:
+                        status = 1
+                    else:
+                        status = 0
+                    serialize_batches.append({
+                        'batch_number': batch.batch_number,
+                        'status': status
+                    })
 
             return jsonify(serialize_batches), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
 
-def get_batch(batch_number):
+def get_batch_details(batch_number):
     with DBHandler.return_session() as session:
         try:
 
@@ -339,7 +338,7 @@ def get_all_images(folder_path):
         return jsonify({'message': str(e)}), 500
 
 
-def get_images(folder_path):
+def get_defected_images(folder_path):
     try:
         if not os.path.exists(folder_path):
             return jsonify({'message': 'Data not found'}), 404
