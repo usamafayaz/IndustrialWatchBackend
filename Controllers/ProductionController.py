@@ -79,28 +79,41 @@ def add_product(data):
 def add_batch(data):
     with DBHandler.return_session() as session:
         try:
-            for i in range(0, int(data["batch_per_day"])):
-                batch = Batch(batch_number=Util.get_formatted_number('B'), product_link_id=data["product_link_id"],
-                              manufacturing_date=Util.get_current_date())
-                # session.add(batch)
-                stocks = data["stock_list"]
-                for stock in stocks:
-                    raw_material_id = stock['raw_material_id']
-                    stock_numbers = stock['stocks']
-                    available_quantity = 0
-                    calculated_quantity = 0
-                    for number in stock_numbers:
-                        result = session.query(Stock, ProductFormula).join(ProductFormula,
-                                                                           ProductFormula.raw_material_id == Stock.raw_material_id).filter(
-                            Stock.stock_number == number).first()
-                        st, pf = result
 
-                        available_quantity += Util.convert_to_kg(pf.quantity, pf.unit)
-                    result = session.query(ProductLink).filter(ProductLink.id == data["product_link_id"]).first()
-                    total_products_in_batch = result.packs_per_batch * result.piece_per_pack * int(
-                        data['batch_per_day'])
-                    print("Billi ==>> ", total_products_in_batch)
-                    calculated_quantity = total_products_in_batch * available_quantity
+            stocks = data["stock_list"]
+            for stock in stocks:
+                raw_material_id = stock['raw_material_id']
+                stock_numbers = stock['stocks']
+                available_quantity = 0
+                total_stock = []
+                total_stock_quantity = 0
+                calculated_required_quantity = 0
+                for number in stock_numbers:
+                    result =session.query(Stock,ProductFormula).join(ProductFormula, ProductFormula.raw_material_id == Stock.raw_material_id).filter(Stock.stock_number == number).first()
+                    st,pf = result
+                    total_stock.append(st)
+                    total_stock_quantity += st.quantity
+                    available_quantity+=Util.convert_to_kg(pf.quantity,pf.unit)
+                result = session.query(ProductLink).filter(ProductLink.id == data["product_link_id"]).first()
+                total_products_in_batch = result.packs_per_batch * result.piece_per_pack * int(data['batch_per_day'])
+                calculated_required_quantity = total_products_in_batch * available_quantity
+                if calculated_required_quantity > total_stock_quantity:
+                    return jsonify({'message': f'Insufficent Quantity'}), 500
+                for st in total_stock:
+                    if calculated_required_quantity==0:
+                        break
+                    elif st.quantity < calculated_required_quantity:
+                        calculated_required_quantity -= st.quantity
+                        st.quantity = 0
+                    elif st.quantity >= calculated_required_quantity:
+                        st.quantity -= calculated_required_quantity
+                        calculated_required_quantity = 0
+                    if st.quantity == 0:
+                        st_in_batch = session.query(StockInBatch).filter(StockInBatch.stock_number == st.stock_number).first()
+                        if st_in_batch != None:
+                            session.delete(st_in_batch)
+                        session.delete(st)
+                    session.commit()
 
                 #     st = StockInBatch(
                 #         batch_number=batch.batch_number,
@@ -108,8 +121,13 @@ def add_batch(data):
                 #     )
                 #     session.add(st)
                 # session.commit()
-                # time.sleep(3)
-            return jsonify({'message': 'Batch Added Successfully'}), 200
+            for i in range(0, int(data["batch_per_day"])):
+                batch = Batch(batch_number=Util.get_formatted_number('B'), product_link_id=data["product_link_id"],
+                              manufacturing_date=Util.get_current_date())
+                session.add(batch)
+                session.commit()
+                time.sleep(1)
+            return jsonify({'message': 'Batches Created Successfully'}), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
@@ -296,6 +314,25 @@ def get_detail_of_raw_material(id):
             return jsonify({'message': str(e)}), 500
 
 
+def get_all_images(folder_path):
+    try:
+        zip_buffer = io.BytesIO()
+
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, _, files in os.walk(folder_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    zip_file.write(file_path, os.path.relpath(file_path, folder_path))
+
+        zip_buffer.seek(0)
+
+        return send_file(zip_buffer, mimetype='application/zip', as_attachment=True,
+                         download_name=f"{folder_path}.zip")
+
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
 def get_images(folder_path):
     try:
         if not os.path.exists(folder_path):
@@ -312,7 +349,7 @@ def get_images(folder_path):
         zip_buffer.seek(0)
 
         return send_file(zip_buffer, mimetype='application/zip', as_attachment=True,
-                         download_name=f"{folder_path.split(os.path.sep)[-1]}.zip"), 200
+                         download_name=f"{folder_path.split(os.path.sep)[-1]}.zip")
 
     except Exception as e:
         return jsonify({'message': str(e)}), 500
