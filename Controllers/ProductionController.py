@@ -101,7 +101,10 @@ def add_batch(data):
                 total_products_in_batch = result.packs_per_batch * result.piece_per_pack * int(data['batch_per_day'])
                 calculated_required_quantity = total_products_in_batch * available_quantity
                 if calculated_required_quantity > total_stock_quantity:
-                    return jsonify({'message': f'Insufficient Quantity'}), 500
+                    raw_material = session.query(RawMaterial).join(ProductFormula,
+                                                                   ProductFormula.raw_material_id == RawMaterial.id) \
+                        .first()
+                    return jsonify({'message': f'Insufficient Quantity for {raw_material.name}'}), 200
                 for st in total_stock:
                     if calculated_required_quantity == 0:
                         break
