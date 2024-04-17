@@ -216,13 +216,15 @@ def get_formula_of_product(product_number):
     with DBHandler.return_session() as session:
         try:
             raw_materials = (
-                session.query(RawMaterial)
+                session.query(RawMaterial, ProductFormula)
                 .join(ProductFormula, ProductFormula.raw_material_id == RawMaterial.id)
                 .filter(ProductFormula.product_number == product_number)
                 .all()
             )
-            serialize_raw_materials = [{'raw_material_id': material.id, 'name': material.name, 'quantity': '0 KG'} for
-                                       material in raw_materials]
+            serialize_raw_materials = [
+                {'raw_material_id': material.id, 'name': material.name,
+                 'quantity': str(Util.convert_to_kg(pf.quantity, pf.unit)) + ' KG'} for
+                material, pf in raw_materials]
             return jsonify(serialize_raw_materials), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
