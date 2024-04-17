@@ -87,7 +87,7 @@ def add_batch(data):
                 total_stock = []
                 total_stock_quantity = 0
                 calculated_required_quantity = 0
-                result = session.query(ProductLink).filter(ProductLink.id == data["product_link_id"]).first()
+                result = session.query(ProductLink).filter(ProductLink.product_number == data["product_number"]).first()
                 for number in stock_numbers:
                     st_result = session.query(Stock, ProductFormula) \
                         .join(ProductFormula, ProductFormula.raw_material_id == Stock.raw_material_id) \
@@ -127,7 +127,7 @@ def add_batch(data):
                 #     session.add(st)
                 # session.commit()
             for i in range(0, int(data["batch_per_day"])):
-                batch = Batch(batch_number=Util.get_formatted_number('B'), product_link_id=data["product_link_id"],
+                batch = Batch(batch_number=Util.get_formatted_number('B'), product_link_id=result.id,
                               manufacturing_date=Util.get_current_date())
                 session.add(batch)
                 session.commit()
