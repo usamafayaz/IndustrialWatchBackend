@@ -88,23 +88,22 @@ def add_batch(data):
                 total_stock_quantity = 0
                 calculated_required_quantity = 0
                 result = session.query(ProductLink).filter(ProductLink.id == data["product_link_id"]).first()
-
                 for number in stock_numbers:
                     st_result = session.query(Stock, ProductFormula) \
                         .join(ProductFormula, ProductFormula.raw_material_id == Stock.raw_material_id) \
                         .filter(Stock.stock_number == number) \
                         .filter(ProductFormula.product_number == result.product_number) \
                         .first()
-                    st,pf = st_result
+                    st, pf = st_result
                     total_stock.append(st)
                     total_stock_quantity += st.quantity
-                    available_quantity=Util.convert_to_kg(pf.quantity,pf.unit)
+                    available_quantity = Util.convert_to_kg(pf.quantity, pf.unit)
                 total_products_in_batch = result.packs_per_batch * result.piece_per_pack * int(data['batch_per_day'])
                 calculated_required_quantity = total_products_in_batch * available_quantity
                 if calculated_required_quantity > total_stock_quantity:
-                    return jsonify({'message': f'Insufficent Quantity'}), 500
+                    return jsonify({'message': f'Insufficient Quantity'}), 500
                 for st in total_stock:
-                    if calculated_required_quantity==0:
+                    if calculated_required_quantity == 0:
                         break
                     elif st.quantity < calculated_required_quantity:
                         calculated_required_quantity -= st.quantity
@@ -113,7 +112,8 @@ def add_batch(data):
                         st.quantity -= calculated_required_quantity
                         calculated_required_quantity = 0
                     if st.quantity == 0:
-                        st_in_batch = session.query(StockInBatch).filter(StockInBatch.stock_number == st.stock_number).first()
+                        st_in_batch = session.query(StockInBatch).filter(
+                            StockInBatch.stock_number == st.stock_number).first()
                         if st_in_batch != None:
                             session.delete(st_in_batch)
                             session.commit()
@@ -150,7 +150,7 @@ def get_all_batches(product_number):
             for batch, product_link in batches:
                 batch_yield = batch.batch_yield
                 rejection_tolerance = product_link.rejection_tolerance
-                if batch_yield !=None:
+                if batch_yield != None:
                     if (100 - batch_yield) > rejection_tolerance:
                         status = 1
                     else:
@@ -175,10 +175,13 @@ def get_batch_details(batch_number):
                 .filter(Batch.batch_number == batch_number)
                 .one()
             )
-
-            batch_yield = batch.batch_yield
+            total_products_in_batch = productLink.packs_per_batch * productLink.piece_per_pack
+            if batch.batch_yield is None:
+                calculated_yield = round(float((batch.defected_pieces / total_products_in_batch) * 100), 2)
+                batch.batch_yield = calculated_yield
+                session.commit()
             rejection_tolerance = productLink.rejection_tolerance
-            if (100 - batch_yield) > rejection_tolerance:
+            if (100 - batch.batch_yield) > rejection_tolerance:
                 status = 1
             else:
                 status = 0
@@ -187,7 +190,7 @@ def get_batch_details(batch_number):
                 'batch_number': batch.batch_number,
                 'status': status,
                 'date': datetime.datetime.strptime(str(batch.manufacturing_date), "%Y-%m-%d").strftime("%x"),
-                'total_piece': '',
+                'total_piece': total_products_in_batch,
                 'defected_piece': batch.defected_pieces,
                 'rejection_tolerance': productLink.rejection_tolerance,
                 'batch_yield': batch.batch_yield
