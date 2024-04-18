@@ -1,0 +1,177 @@
+create database IndustrialWatchFYP
+use IndustrialWatchFYP
+
+---1. Creating RawMaterial Table for Violations
+CREATE TABLE RawMaterial (
+	id INT not null identity(1,1) PRIMARY KEY,
+	name VARCHAR(20),
+);
+
+---2. Product Creation----
+CREATE TABLE Product (
+    product_number varchar(40) PRIMARY KEY,
+	name VARCHAR(25),
+	inspection_angles varchar(50),
+);
+
+---3. ProductFormula Creation----
+create table ProductFormula(
+	id INT not null identity(1,1) PRIMARY KEY,
+	product_number varchar(40) foreign key references Product(product_number),
+	unit varchar(5),
+    raw_material_id int foreign key references RawMaterial(id),
+	quantity int
+);
+
+-- 4. Create Stock Table
+CREATE TABLE Stock(
+    stock_number varchar(40) PRIMARY KEY,
+	raw_material_id int FOREIGN KEY REFERENCES RawMaterial(id),
+	quantity INT,
+    price_per_kg MONEY,
+	purchased_date date,
+);
+
+-- 5. Create Batch Table
+
+CREATE TABLE Batch (
+    batch_number VARCHAR(40) not null PRIMARY KEY,
+	product_link_id int foreign key references ProductLink(id),
+	manufacturing_date date,
+	batch_yield float,
+	defected_pieces int
+);
+
+-- 6. Create ProductLink Table
+
+CREATE TABLE ProductLink(
+	id int identity(1,1) primary key,
+	packs_per_batch int,
+	piece_per_pack int,
+	rejection_tolerance float,
+	product_number VARCHAR(40) foreign key references Product(product_number)
+);
+
+-- 7. Create StockInBatch Table
+create table StockInBatch(
+	id int identity(1,1) primary key,
+	stock_number varchar(40) Foreign Key references Stock(stock_number),
+	batch_number varchar(40) foreign key references Batch(batch_number)
+);
+
+-- 8. Create Section Table
+CREATE TABLE Section (
+    id INT not null identity(1,1) PRIMARY KEY,
+    name VARCHAR(25),
+	status int
+);
+
+------------------------
+
+-- 9. Create Rule Table
+CREATE TABLE ProductivityRule(
+    id INT not null identity(1,1)  PRIMARY KEY,
+    name VARCHAR(20)
+);
+
+-------------------------
+
+-- 10. Create SectionRule Table
+CREATE TABLE SectionRule (
+    id INT  not null identity(1,1) PRIMARY KEY,
+    section_id INT,
+    rule_id INT,
+    fine MONEY,
+	allowed_time TIME,
+	date_time DateTime,
+    FOREIGN KEY (section_id) REFERENCES Section(id),
+    FOREIGN KEY (rule_id) REFERENCES ProductivityRule(id)
+);
+
+
+------------------------
+
+-- 11. Create users Table
+CREATE TABLE Users (
+    id INT not null identity(1,1)  PRIMARY KEY,
+    username VARCHAR(25),
+    password VARCHAR(25),
+    user_role VARCHAR(20),
+);
+
+------------------------
+
+-- 12. Create Employee Table
+CREATE TABLE Employee (
+    id INT not null identity(1,1) PRIMARY KEY,
+	name VARCHAR(30),
+    salary MONEY,
+    job_role VARCHAR(20),
+    job_type VARCHAR(15),
+    date_of_joining DATE,
+	gender VARCHAR(6),
+    user_id INT,
+    FOREIGN KEY (user_id) REFERENCES Users(id)
+);
+
+------------------------
+
+--13. Create EmployeeSection Table for many to many relationship
+CREATE TABLE EmployeeSection(
+	id int not null identity(1,1) PRIMARY KEY,
+	employee_id int,
+	section_id int,
+	date_time DateTime,
+	FOREIGN KEY (employee_id) REFERENCES Employee(id),
+	FOREIGN KEY (section_id) REFERENCES Section(id)
+);
+
+------------------------
+
+--14. Create EmployeeImages Table
+CREATE TABLE EmployeeImages(
+	id int not null identity(1,1) PRIMARY KEY,
+	employee_id int,
+	image_url varchar(MAX),
+	FOREIGN KEY (employee_id) REFERENCES Employee(id),
+);
+
+------------------------
+
+-- 15. Create Attendance Table
+CREATE TABLE Attendance (
+    id INT  not null identity(1,1) PRIMARY KEY,
+    check_in TIME,
+    check_out TIME,
+    attendance_date DATE,
+    employee_id INT,
+    FOREIGN KEY (employee_id) REFERENCES Employee(id)
+);
+
+------------------------
+
+
+-- 16. Create Violation Table
+CREATE TABLE Violation (
+    id INT not null identity(1,1)  PRIMARY KEY,
+	employee_id INT,
+    rule_id INT,
+	date Date,
+	start_time Time,
+	end_time Time,
+    FOREIGN KEY (rule_id) REFERENCES ProductivityRule(id),
+	FOREIGN KEY (employee_id) REFERENCES Employee(id)
+);
+
+------------------------
+
+--17 Creating Images Table for Violations
+CREATE TABLE ViolationImages(
+	id int not null identity(1,1) PRIMARY KEY,
+	violation_id int,
+	image_url varchar(Max),
+	FOREIGN KEY (violation_id) REFERENCES Violation(id),
+	capture_time Time
+);
+
+------------------------

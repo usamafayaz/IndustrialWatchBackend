@@ -79,7 +79,6 @@ def add_product(data):
 def add_batch(data):
     with DBHandler.return_session() as session:
         try:
-
             stocks = data["stock_list"]
             for stock in stocks:
                 stock_numbers = stock['stocks']
@@ -104,7 +103,7 @@ def add_batch(data):
                     raw_material = session.query(RawMaterial).join(ProductFormula,
                                                                    ProductFormula.raw_material_id == RawMaterial.id) \
                         .first()
-                    return jsonify({'message': f'Insufficient Quantity for {raw_material.name}'}), 200
+                    return jsonify({'message': f'Insufficient Quantity for {raw_material.name}'}), 500
                 for st in total_stock:
                     if calculated_required_quantity == 0:
                         break
@@ -131,7 +130,8 @@ def add_batch(data):
                 # session.commit()
             for i in range(0, int(data["batch_per_day"])):
                 batch = Batch(batch_number=Util.get_formatted_number('B'), product_link_id=result.id,
-                              manufacturing_date=Util.get_current_date())
+                              manufacturing_date=Util.get_current_date(),batch_yield=-1, defected_pieces=0)
+
                 session.add(batch)
                 session.commit()
                 time.sleep(1)
@@ -153,8 +153,10 @@ def get_all_batches(product_number):
             for batch, product_link in batches:
                 batch_yield = batch.batch_yield
                 rejection_tolerance = product_link.rejection_tolerance
-                if batch_yield != None:
-                    if (100 - batch_yield) > rejection_tolerance:
+                if batch.defected_pieces != None :
+                    if batch_yield == -1:
+                        status = 2
+                    elif (100 - batch_yield) > rejection_tolerance:
                         status = 1
                     else:
                         status = 0
@@ -184,7 +186,9 @@ def get_batch_details(batch_number):
                 batch.batch_yield = calculated_yield
                 session.commit()
             rejection_tolerance = productLink.rejection_tolerance
-            if (100 - batch.batch_yield) > rejection_tolerance:
+            if batch.batch_yield == -1:
+                status = 2
+            elif (100 - batch.batch_yield) > rejection_tolerance:
                 status = 1
             else:
                 status = 0
