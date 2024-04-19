@@ -7,5 +7,4 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(25))
     password = Column(String(25))
-    role = Column(String(20))
-    name = Column(String(30))
+    user_role = Column(String(20))

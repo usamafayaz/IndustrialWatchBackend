@@ -1,7 +1,5 @@
 import json
-
 from sqlalchemy import select
-
 import DBHandler
 from Models.User import User
 from flask import jsonify

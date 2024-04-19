@@ -1,12 +1,6 @@
-import datetime
-import time
-
-from flask import jsonify
+import datetime, time, os, io, zipfile
+from flask import jsonify, send_file
 from sqlalchemy import select, func, join, outerjoin
-import os
-import io
-from flask import send_file
-import zipfile
 import DBHandler
 import Util
 from Models.RawMaterial import RawMaterial
