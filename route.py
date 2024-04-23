@@ -1,5 +1,5 @@
 import os
-from Controllers import ProductionController, UserController
+from Controllers import ProductionController, UserController, SectionController
 from flask import Flask, jsonify, request, send_from_directory
 import Util
 
@@ -159,6 +159,37 @@ def delete_user():
 def login():
     response = UserController.login(username=request.args.get('username'), password=request.args.get('password'))
     return response
+
+############################SectionController#############################
+@app.route('/api/Section/InsertSection', methods=['POST'])
+def insert_section():
+    data = request.get_json()
+    response = SectionController.insert_section(data)
+    return response
+
+@app.route('/api/Section/GetAllSections', methods=['GET'])
+def get_all_section():
+    response = SectionController.get_all_sections()
+    return response
+
+@app.route('/api/Section/GetSectionDetail', methods=['GET'])
+def get_section_detail():
+    section_id = request.args.get('section_id')
+    response = SectionController.get_section_detail(section_id)
+    return response
+
+@app.route('/api/Section/UpdateSection', methods=['PUT'])
+def update_section():
+    data = request.get_json()
+    response = SectionController.update_section(data)
+    return response
+
+@app.route('/api/Section/GetAllRule', methods=['GET'])
+def get_all_rules():
+    response = SectionController.get_all_rules()
+    return response
+
+
 
 
 if __name__ == '__main__':

@@ -27,7 +27,6 @@ def get_all_user():
             return jsonify({'message': str(e)}), 500
 
 
-#
 def get_user(user_id):
     with DBHandler.return_session() as session:
         try:

@@ -1,6 +1,5 @@
 create database IndustrialWatchFYP
 use IndustrialWatchFYP
-
 ---1. Creating RawMaterial Table for Violations
 CREATE TABLE RawMaterial (
 	id INT not null identity(1,1) PRIMARY KEY,
@@ -101,12 +100,20 @@ CREATE TABLE Users (
 
 ------------------------
 
--- 12. Create Employee Table
+-- 12. Create JobRole Table
+CREATE TABLE JobRole (
+	id int not null identity(1,1) PRIMARY KEY,
+	name VARCHAR(30),
+);
+
+------------------------
+
+-- 13. Create Employee Table
 CREATE TABLE Employee (
     id INT not null identity(1,1) PRIMARY KEY,
 	name VARCHAR(30),
     salary MONEY,
-    job_role VARCHAR(20),
+    job_role_id int foreign key references JobRole(id),
     job_type VARCHAR(15),
     date_of_joining DATE,
 	gender VARCHAR(6),
@@ -116,7 +123,7 @@ CREATE TABLE Employee (
 
 ------------------------
 
---13. Create EmployeeSection Table for many to many relationship
+--14. Create EmployeeSection Table for many to many relationship
 CREATE TABLE EmployeeSection(
 	id int not null identity(1,1) PRIMARY KEY,
 	employee_id int,
@@ -128,7 +135,7 @@ CREATE TABLE EmployeeSection(
 
 ------------------------
 
---14. Create EmployeeImages Table
+--15. Create EmployeeImages Table
 CREATE TABLE EmployeeImages(
 	id int not null identity(1,1) PRIMARY KEY,
 	employee_id int,
@@ -138,7 +145,7 @@ CREATE TABLE EmployeeImages(
 
 ------------------------
 
--- 15. Create Attendance Table
+-- 16. Create Attendance Table
 CREATE TABLE Attendance (
     id INT  not null identity(1,1) PRIMARY KEY,
     check_in TIME,
@@ -151,7 +158,7 @@ CREATE TABLE Attendance (
 ------------------------
 
 
--- 16. Create Violation Table
+-- 17. Create Violation Table
 CREATE TABLE Violation (
     id INT not null identity(1,1)  PRIMARY KEY,
 	employee_id INT,
@@ -165,7 +172,7 @@ CREATE TABLE Violation (
 
 ------------------------
 
---17 Creating Images Table for Violations
+--18. Creating Images Table for Violations
 CREATE TABLE ViolationImages(
 	id int not null identity(1,1) PRIMARY KEY,
 	violation_id int,
