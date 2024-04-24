@@ -151,6 +151,11 @@ def update_section():
     response = SectionController.update_section(data)
     return response
 
+@app.route('/api/Section/ChangeSectionAcitivityStatus', methods=['GET'])
+def change_section_activity_status():
+    section_id = request.args.get('section_id')
+    response = SectionController.change_section_activity_status(section_id)
+    return response
 
 @app.route('/api/Section/GetAllRule', methods=['GET'])
 def get_all_rules():
@@ -184,6 +189,12 @@ def add_employee():
             'section_id': section_id, 'username': username, 'password': password, 'images': files}
     response = EmployeeController.add_employee(data)
     return response
+
+@app.route('/api/Employee/GetAllJobRoles', methods=['GET'])
+def get_all_job_roles():
+    response = EmployeeController.get_all_job_roles()
+    return response
+
 
 
 if __name__ == '__main__':

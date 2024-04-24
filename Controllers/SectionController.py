@@ -90,6 +90,20 @@ def get_section_detail(id):
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
+def change_section_activity_status(id):
+    with DBHandler.return_session() as session:
+        try:
+            section = session.query(Section).filter(Section.id == id).first()
+            if section.status==0:
+                section.status=1
+                session.commit()
+                return jsonify({'message': 'Section Successfully Activated.'}), 200
+            else:
+                section.status=0
+                session.commit()
+                return jsonify({'message': 'Section Successfully Deactivated.'}), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
 
 def update_section(data):
     with DBHandler.return_session() as session:

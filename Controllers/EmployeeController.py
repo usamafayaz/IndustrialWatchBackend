@@ -119,3 +119,22 @@ def add_employee_to_section(employee_id, section_id, ):
             return True
         except Exception as e:
             return False
+
+
+def get_all_job_roles():
+    with DBHandler.return_session() as session:
+        try:
+            job_roles = session.query(JobRole).all()
+            if job_roles:
+                job_roles_data = []
+                for job_role in job_roles:
+                    data = {
+                        'id': job_role.id,
+                        'name': job_role.name,
+                    }
+                    job_roles_data.append(data)
+                return jsonify(job_roles_data), 200
+            else:
+                return jsonify({'message': 'No Data Found'}), 500
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
