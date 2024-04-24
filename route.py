@@ -1,9 +1,10 @@
 import os
-from Controllers import ProductionController, UserController, SectionController
+from Controllers import ProductionController, EmployeeController, SectionController
 from flask import Flask, jsonify, request, send_from_directory
 import Util
 
 app = Flask(__name__)
+app.config['EmployeeImages'] = 'EmployeeImages'  # folder name
 
 
 ############### Production Controller
@@ -113,6 +114,7 @@ def get_all_defected_images():
     response = ProductionController.get_defected_images(folder_path)
     return response
 
+
 @app.route('/api/Production/GetDefectedImagesOfBatch', methods=['GET'])
 def get_defected_images():
     product_number = request.args.get('product_number')
@@ -121,44 +123,6 @@ def get_defected_images():
     response = ProductionController.get_defected_images(folder_path)
     return response
 
-#####################  User Controller  #################################
-@app.route('/api/User/InsertUser', methods=['POST'])
-def insert_user():
-    data = request.get_json()
-    return UserController.insert_user(data)
-
-
-@app.route('/api/User/GetAllUsers', methods=['GET'])
-def get_all_user():
-    return jsonify(UserController.get_all_user())
-
-
-@app.route('/api/User/GetUser', methods=['GET'])
-def get_user():
-    user_id = request.args.get('id')
-    response = UserController.get_user(user_id=user_id)
-    return jsonify(response)
-
-
-@app.route('/api/User/UpdateUser', methods=['PUT'])
-def update_user():
-    data = request.get_json()
-    response = UserController.update_user(data)
-    return jsonify(response)
-
-
-@app.route('/api/User/DeleteUser', methods=['DELETE'])
-def delete_user():
-    user_id = request.args.get('id')
-    print(user_id)
-    response = UserController.delete_user(user_id)
-    return jsonify(response)
-
-
-@app.route('/api/User/Login', methods=['GET'])
-def login():
-    response = UserController.login(username=request.args.get('username'), password=request.args.get('password'))
-    return response
 
 ############################SectionController#############################
 @app.route('/api/Section/InsertSection', methods=['POST'])
@@ -167,10 +131,12 @@ def insert_section():
     response = SectionController.insert_section(data)
     return response
 
+
 @app.route('/api/Section/GetAllSections', methods=['GET'])
 def get_all_section():
     response = SectionController.get_all_sections()
     return response
+
 
 @app.route('/api/Section/GetSectionDetail', methods=['GET'])
 def get_section_detail():
@@ -178,11 +144,13 @@ def get_section_detail():
     response = SectionController.get_section_detail(section_id)
     return response
 
+
 @app.route('/api/Section/UpdateSection', methods=['PUT'])
 def update_section():
     data = request.get_json()
     response = SectionController.update_section(data)
     return response
+
 
 @app.route('/api/Section/GetAllRule', methods=['GET'])
 def get_all_rules():
@@ -190,6 +158,32 @@ def get_all_rules():
     return response
 
 
+#####################  Employee Controller  #################################
+@app.route('/api/Employee/Login', methods=['GET'])
+def login():
+    response = EmployeeController.login(username=request.args.get('username'), password=request.args.get('password'))
+    return response
+
+
+@app.route('/api/Employee/AddEmployee', methods=['POST'])
+def add_employee():
+    if 'files' not in request.files:
+        return jsonify({'message': 'No files part'}), 500
+    files = request.files.getlist('files')
+    if not files:
+        return jsonify({'message': 'No files selected'}), 500
+    name = request.form.get('name')
+    salary = request.form.get('salary')
+    username = request.form.get('username')
+    password = request.form.get('password')
+    job_role = request.form.get('job_role_id')
+    job_type = request.form.get('job_type')
+    gender = request.form.get('gender')
+    section_id = request.form.get('section_id')
+    data = {'name': name, 'salary': salary, 'job_role_id': job_role, 'job_type': job_type, 'gender': gender,
+            'section_id': section_id, 'username': username, 'password': password, 'images': files}
+    response = EmployeeController.add_employee(data)
+    return response
 
 
 if __name__ == '__main__':

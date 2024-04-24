@@ -6,6 +6,7 @@ from Models.ProductivityRule import ProductivityRule
 from Models.SectionRule import SectionRule
 from sqlalchemy import select
 
+
 def insert_section(data):
     with DBHandler.return_session() as session:
         try:
@@ -16,14 +17,15 @@ def insert_section(data):
             if section == None:
                 return jsonify({'message': 'Section is not Added check input Data please!'}), 500
             rules = data['rules']
-            if insert_rules_in_section(rules,section_id = section.id) == False:
+            if insert_rules_in_section(rules, section_id=section.id) == False:
                 return jsonify({'message': f'Unable to get Rules check input Data please!'}), 500
             return jsonify({'message': 'Section Successfully Added'}), 200
 
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
-def insert_rules_in_section(rules,section_id):
+
+def insert_rules_in_section(rules, section_id):
     try:
         session = DBHandler.return_session()
         for rule in rules:
@@ -32,13 +34,14 @@ def insert_rules_in_section(rules,section_id):
                 rule_id=rule['rule_id'],
                 fine=rule['fine'],
                 allowed_time=rule['allowed_time'],
-                date_time= datetime.now()
+                date_time=datetime.now()
             )
             session.add(rul)
             session.commit()
         return True
     except Exception as e:
         return False
+
 
 def get_all_sections():
     with DBHandler.return_session() as session:
@@ -47,11 +50,11 @@ def get_all_sections():
             if sections:
                 sections_data = []
                 for section in sections:
-                    if section.status ==1:
+                    if section.status == 1:
                         data = {
                             'id': section.id,
                             'name': section.name,
-                            'status':section.status
+                            'status': section.status
                         }
                         sections_data.append(data)
                 return jsonify(sections_data), 200
@@ -60,29 +63,34 @@ def get_all_sections():
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
+
 def get_section_detail(id):
     with DBHandler.return_session() as session:
         try:
             section = session.query(Section).filter(Section.id == id).first()
             if section == None:
                 return jsonify({'message': 'Section not found'}), 500
-            query = session.query(Section, SectionRule, ProductivityRule).join(SectionRule, Section.id == SectionRule.section_id).join(ProductivityRule, SectionRule.rule_id == ProductivityRule.id).filter(Section.id == id)
+            query = session.query(Section, SectionRule, ProductivityRule).join(SectionRule,
+                                                                               Section.id == SectionRule.section_id).join(
+                ProductivityRule, SectionRule.rule_id == ProductivityRule.id).filter(Section.id == id)
             result = query.all()
             data = {
                 'id': section.id,
-                'name' : section.name,
-                'rules' : []
+                'name': section.name,
+                'rules': []
             }
             for sec, section_rule, productivity_rule in result:
                 data['rules'].append({
-                    'rule_id' : productivity_rule.id,
-                    'rule_name' : productivity_rule.name,
-                    'allowed_time' : str(section_rule.allowed_time),
-                    'fine' : section_rule.fine
+                    'rule_id': productivity_rule.id,
+                    'rule_name': productivity_rule.name,
+                    'allowed_time': str(section_rule.allowed_time),
+                    'fine': section_rule.fine
                 })
             return jsonify(data), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
+
 def update_section(data):
     with DBHandler.return_session() as session:
         try:
@@ -105,6 +113,7 @@ def update_section(data):
             return jsonify({'message': f'Section Successfully Updated'}), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
 
 def get_all_rules():
     with DBHandler.return_session() as session:
