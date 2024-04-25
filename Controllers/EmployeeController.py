@@ -4,6 +4,7 @@ import DBHandler
 import Util
 from Models.Employee import Employee
 from Models.EmployeeSection import EmployeeSection
+from Models.Section import Section
 from Models.JobRole import JobRole
 from Models.EmployeeImages import EmployeeImages
 from Models.User import User
@@ -134,6 +135,30 @@ def get_all_job_roles():
                     }
                     job_roles_data.append(data)
                 return jsonify(job_roles_data), 200
+            else:
+                return jsonify({'message': 'No Data Found'}), 500
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+
+def get_all_supervisors():
+    with DBHandler.return_session() as session:
+        try:
+            supervisors = session.query(Employee.name , Section.name, Employee.id). \
+                join(EmployeeSection, Employee.id == EmployeeSection.employee_id). \
+                join(Section, Section.id == EmployeeSection.section_id). \
+                join(User, User.id == Employee.user_id). \
+                filter(User.user_role == 'Supervisor').all()
+            if supervisors:
+                supervisors_list = []
+                for supervisor in supervisors:
+                    data = {
+                        'employee_id': supervisor.id,
+                        'employee_name': supervisor[0],
+                        'employee_section': supervisor[1],
+                    }
+                    supervisors_list.append(data)
+                return jsonify(supervisors_list), 200
             else:
                 return jsonify({'message': 'No Data Found'}), 500
         except Exception as e:

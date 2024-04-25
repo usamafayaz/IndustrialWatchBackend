@@ -43,23 +43,22 @@ def insert_rules_in_section(rules, section_id):
         return False
 
 
-def get_all_sections():
+def get_all_sections(status):
     with DBHandler.return_session() as session:
         try:
-            sections = session.query(Section).all()
+            sections = session.query(Section).filter(Section.status == status).all()
             if sections:
                 sections_data = []
                 for section in sections:
-                    if section.status == 1:
-                        data = {
-                            'id': section.id,
-                            'name': section.name,
-                            'status': section.status
-                        }
-                        sections_data.append(data)
+                    data = {
+                        'id': section.id,
+                        'name': section.name,
+                        'status': section.status
+                    }
+                    sections_data.append(data)
                 return jsonify(sections_data), 200
             else:
-                return jsonify({'message': 'Section Not Found'}), 500
+                return jsonify({'message': 'No sections found with status {}'.format(status)}), 404
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 

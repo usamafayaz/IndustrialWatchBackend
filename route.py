@@ -134,7 +134,8 @@ def insert_section():
 
 @app.route('/api/Section/GetAllSections', methods=['GET'])
 def get_all_section():
-    response = SectionController.get_all_sections()
+    status = request.args.get('status')
+    response = SectionController.get_all_sections(int(status))
     return response
 
 
@@ -193,6 +194,11 @@ def add_employee():
 @app.route('/api/Employee/GetAllJobRoles', methods=['GET'])
 def get_all_job_roles():
     response = EmployeeController.get_all_job_roles()
+    return response
+
+@app.route('/api/Employee/GetAllSupervisors', methods=['GET'])
+def get_all_supervisors():
+    response = EmployeeController.get_all_supervisors()
     return response
 
 
