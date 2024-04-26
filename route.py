@@ -202,6 +202,17 @@ def get_all_supervisors():
     return response
 
 
+@app.route('/api/Employee/GetSupervisorDetail', methods=['GET'])
+def get_supervisor_detail():
+    supervisor_id = request.args.get('supervisor_id')
+    response = EmployeeController.get_supervisor_detail(supervisor_id)
+    return response
+
+@app.route('/api/Employee/UpdateSupervisor', methods=['POST'])
+def update_supervisor():
+    data = request.get_json()
+    response = EmployeeController.update_supervisor(data)
+    return response
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=False)

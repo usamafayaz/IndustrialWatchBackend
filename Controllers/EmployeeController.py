@@ -9,6 +9,8 @@ from Models.JobRole import JobRole
 from Models.EmployeeImages import EmployeeImages
 from Models.User import User
 from route import app
+from sqlalchemy import delete
+
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
@@ -144,22 +146,91 @@ def get_all_job_roles():
 def get_all_supervisors():
     with DBHandler.return_session() as session:
         try:
-            supervisors = session.query(Employee.name , Section.name, Employee.id). \
+            supervisors = session.query(Employee.name, Section.name, Employee.id). \
                 join(EmployeeSection, Employee.id == EmployeeSection.employee_id). \
                 join(Section, Section.id == EmployeeSection.section_id). \
                 join(User, User.id == Employee.user_id). \
                 filter(User.user_role == 'Supervisor').all()
             if supervisors:
-                supervisors_list = []
+                supervisors_dict = {}
                 for supervisor in supervisors:
-                    data = {
-                        'employee_id': supervisor.id,
-                        'employee_name': supervisor[0],
-                        'employee_section': supervisor[1],
-                    }
-                    supervisors_list.append(data)
+                    employee_id = supervisor.id
+                    employee_name = supervisor[0]
+                    section_name = supervisor[1]
+                    if employee_id not in supervisors_dict:
+                        supervisors_dict[employee_id] = {
+                            'employee_id': employee_id,
+                            'employee_name': employee_name,
+                            'sections': [section_name]
+                        }
+                    else:
+                        supervisors_dict[employee_id]['sections'].append(section_name)
+
+                supervisors_list = list(supervisors_dict.values())
                 return jsonify(supervisors_list), 200
             else:
                 return jsonify({'message': 'No Data Found'}), 500
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
+
+def get_supervisor_detail(supervisor_id):
+    with DBHandler.return_session() as session:
+        try:
+            supervisor_detail = session.query(User.username, User.password, Section.name, Section.id) \
+                .join(Employee, User.id == Employee.user_id) \
+                .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                .join(Section, Section.id == EmployeeSection.section_id) \
+                .filter(Employee.id == supervisor_id) \
+                .all()
+
+            if supervisor_detail:
+                user_data = {}
+                for user, password, section_name, section_id in supervisor_detail:
+                    if user not in user_data:
+                        user_data[user] = {'password': password, 'sections': []}
+                    user_data[user]['sections'].append({'name': section_name, 'id': section_id})
+
+                result = [{'username': user, 'password': data['password'], 'sections': data['sections']} for user, data
+                          in user_data.items()]
+
+                return jsonify(result), 200
+            else:
+                return jsonify({'message': 'No Data Found'}), 500
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+
+def update_supervisor(data):
+    with DBHandler.return_session() as session:
+        try:
+            supervisor = session.query(User).join(Employee, User.id == Employee.user_id).filter(
+                Employee.id == data.get('employee_id')).first()
+            if supervisor:
+                # Fetch all EmployeeSection objects related to the supervisor
+                employee_sections = session.query(EmployeeSection).filter(
+                    EmployeeSection.employee_id == data.get('employee_id')).all()
+
+                # Delete all fetched EmployeeSection objects
+                for employee_section in employee_sections:
+                    session.delete(employee_section)
+
+                # Update supervisor's username and password
+                supervisor.username = data.get('username')
+                supervisor.password = data.get('password')
+
+                # Add new sections
+                sections = data.get('sections')
+                for section in sections:
+                    session.add(
+                        EmployeeSection(employee_id=data.get('employee_id'), section_id=section,
+                                        date_time=Util.get_current_date()))
+
+                session.commit()
+
+                return jsonify({'message': 'Supervisor Updated'}), 200
+            else:
+                return jsonify({'message': 'Supervisor not found'}), 404
+        except Exception as e:
+            session.rollback()
+            return jsonify({'error': str(e)}), 500
