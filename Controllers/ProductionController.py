@@ -150,7 +150,7 @@ def get_all_batches(product_number):
                 if batch.defected_pieces != None :
                     if batch_yield == -1:
                         status = 2
-                    elif (100 - batch_yield) > rejection_tolerance:
+                    elif (100 - batch.batch_yield) > (rejection_tolerance * 100):
                         status = 1
                     else:
                         status = 0
@@ -182,7 +182,7 @@ def get_batch_details(batch_number):
             rejection_tolerance = productLink.rejection_tolerance
             if batch.batch_yield == -1:
                 status = 2
-            elif (100 - batch.batch_yield) > rejection_tolerance:
+            elif (100 - batch.batch_yield) > (rejection_tolerance * 100):
                 status = 1
             else:
                 status = 0
@@ -364,3 +364,8 @@ def get_defected_images(folder_path):
 
     except Exception as e:
         return jsonify({'message': str(e)}), 500
+
+def calculate_yield():
+    # Todo
+    #  Calculate and Update Batch Yield and Increment Defected Pieces
+    pass
