@@ -1,0 +1,15 @@
+# Ignore compiled python bytecode files
+*.pyc
+
+# Ignore python cache directories
+__pycache__/
+
+# Ignore enviorenment-specific settings
+.env
+
+# Igrnore editor-specific files
+.idea/
+
+# Ignore directories
+/defected_items
+/EmployeeImages
