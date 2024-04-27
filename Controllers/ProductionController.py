@@ -124,7 +124,7 @@ def add_batch(data):
                 # session.commit()
             for i in range(0, int(data["batch_per_day"])):
                 batch = Batch(batch_number=Util.get_formatted_number('B'), product_link_id=result.id,
-                              manufacturing_date=Util.get_current_date(),batch_yield=-1, defected_pieces=0)
+                              manufacturing_date=Util.get_current_date(), batch_yield=-1, defected_pieces=0)
 
                 session.add(batch)
                 session.commit()
@@ -147,7 +147,7 @@ def get_all_batches(product_number):
             for batch, product_link in batches:
                 batch_yield = batch.batch_yield
                 rejection_tolerance = product_link.rejection_tolerance
-                if batch.defected_pieces != None :
+                if batch.defected_pieces != None:
                     if batch_yield == -1:
                         status = 2
                     elif (100 - batch.batch_yield) > (rejection_tolerance * 100):

@@ -38,6 +38,7 @@ def add_employee(data):
     with DBHandler.return_session() as session:
         try:
             job_role = session.query(JobRole).filter(JobRole.id == data.get('job_role_id')).first()
+            user_role = ''
             if job_role.name == 'Supervisor' or job_role.name == 'supervisor':
                 user_role = 'Supervisor'
             else:
@@ -109,7 +110,7 @@ def add_employee_images(name, employee_id, images_list):
                     session.commit()
             return True
         except Exception as e:
-            False
+            return False
 
 
 def add_employee_to_section(employee_id, section_id, ):
@@ -198,7 +199,7 @@ def get_supervisor_detail(supervisor_id):
             else:
                 return jsonify({'message': 'No Data Found'}), 500
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return jsonify({'message': str(e)}), 500
 
 
 def update_supervisor(data):
@@ -223,7 +224,7 @@ def update_supervisor(data):
                 sections = data.get('sections')
                 for section in sections:
                     session.add(
-                        EmployeeSection(employee_id=data.get('employee_id'), section_id=section,
+                        EmployeeSection(employee_id=data.get('employee_id'), section_id=section['id'],
                                         date_time=Util.get_current_date()))
 
                 session.commit()
@@ -233,4 +234,4 @@ def update_supervisor(data):
                 return jsonify({'message': 'Supervisor not found'}), 404
         except Exception as e:
             session.rollback()
-            return jsonify({'error': str(e)}), 500
+            return jsonify({'message': str(e)}), 500
