@@ -13,3 +13,4 @@ __pycache__/
 # Ignore directories
 /defected_items
 /EmployeeImages
+/DBHandler.py
