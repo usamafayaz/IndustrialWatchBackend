@@ -224,7 +224,7 @@ def update_supervisor(data):
                 sections = data.get('sections')
                 for section in sections:
                     session.add(
-                        EmployeeSection(employee_id=data.get('employee_id'), section_id=section['id'],
+                        EmployeeSection(employee_id=data.get('employee_id'), section_id=section,
                                         date_time=Util.get_current_date()))
 
                 session.commit()
