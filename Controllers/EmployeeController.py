@@ -4,13 +4,18 @@ import DBHandler
 import Util
 from Models.Employee import Employee
 from Models.EmployeeSection import EmployeeSection
+from Models.Violation import Violation
+from Models.SectionRule import SectionRule
 from Models.Section import Section
 from Models.JobRole import JobRole
 from Models.EmployeeImages import EmployeeImages
+from Models.EmployeeProductivity import EmployeeProductivity
+from Models.Attendance import Attendance
 from Models.User import User
 from route import app
-from sqlalchemy import delete
-
+from sqlalchemy import delete,func
+import calendar
+from datetime import date, timedelta, datetime
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
@@ -234,4 +239,128 @@ def update_supervisor(data):
                 return jsonify({'message': 'Supervisor not found'}), 404
         except Exception as e:
             session.rollback()
+            return jsonify({'message': str(e)}), 500
+
+
+def get_all_employees(section_id):
+    with DBHandler.return_session() as session:
+        try:
+            if int(section_id) == -1:
+                employees = session.query(Employee.id, Employee.name, Section.name, EmployeeProductivity.productivity) \
+                    .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                    .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
+                    .join(Section, EmployeeSection.section_id == Section.id) \
+                    .all()
+            else:
+                employees = session.query(Employee.id, Employee.name, Section.name, EmployeeProductivity.productivity) \
+                    .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                    .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
+                    .join(Section, EmployeeSection.section_id == Section.id) \
+                    .filter(EmployeeSection.section_id == section_id) \
+                    .all()
+            serialize = []
+            if len(employees) == 0:
+                return jsonify({'message': 'No Record Found'}), 404
+            for employee in employees:
+                images = session.query(EmployeeImages.image_url).filter(EmployeeImages.employee_id == employee[0]).all()
+                image_urls = [image[0] for image in images]
+                serialize.append({
+                    'employee_id': employee[0],
+                    'name': employee[1],
+                    'section_name': employee[2],
+                    'productivity': employee[3],
+                    'image': image_urls[0]
+                })
+            return jsonify(serialize), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+
+def get_employee_detail(employee_id):
+    try:
+        with DBHandler.return_session() as session:
+            total_fine = session.query(func.sum(SectionRule.fine)) \
+                .join(EmployeeSection, EmployeeSection.section_id == SectionRule.section_id) \
+                .join(Violation, (Violation.rule_id == SectionRule.rule_id) & (
+                        Violation.employee_id == EmployeeSection.employee_id)) \
+                .filter(Violation.employee_id == employee_id) \
+                .scalar()
+            productivity=session.query(EmployeeProductivity.productivity).filter(EmployeeProductivity.employee_id==employee_id).scalar()
+            if total_fine is None:
+                total_fine=0
+        return jsonify({'total_fine':total_fine,'productivity':productivity})
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+def get_employee_attendance(employee_id):
+    with DBHandler.return_session() as session:
+        try:
+            # Get all attendance records for the employee
+            attendance = session.query(Attendance).filter(Attendance.employee_id == int(employee_id)).all()
+
+            if len(attendance) == 0:
+                return jsonify({'message': 'Record not found.'}), 500
+
+            # Create a dictionary to store attendance by date
+            attendance_dict = {att.attendance_date.strftime("%Y-%m-%d"): att for att in attendance}
+
+            # Get current year and month
+            today = date.today()
+            current_year = today.year
+            current_month = today.month
+            current_day = today.day
+
+            # Get the total number of days in the current month
+            _, num_days = calendar.monthrange(current_year, current_month)
+
+            # Initialize a list to store serialized attendance
+            serialize_attendance = []
+
+            # Iterate through each day of the month up to today's date
+            for day in range(1, current_day + 1):
+                # Construct the date
+                attendance_date = datetime(current_year, current_month, day).strftime("%Y-%m-%d")
+
+                # Check if the day is a weekday (Monday to Friday)
+                if datetime.strptime(attendance_date, "%Y-%m-%d").weekday() < 5:
+                    # If the attendance record exists for the date, serialize it
+                    if attendance_date in attendance_dict:
+                        serialize_attendance.append({'attendance_date': attendance_date, 'status': 'P'})
+                    # If the attendance record doesn't exist, mark as 'A'
+                    else:
+                        serialize_attendance.append({'attendance_date': attendance_date, 'status': 'A'})
+
+            return jsonify(serialize_attendance), 200
+
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+def mark_attendance(employee_id):
+    with DBHandler.return_session() as session:
+        try:
+            today = date.today()
+            current_year = today.year
+            current_month = today.month
+            cal = calendar.monthcalendar(current_year, current_month)
+            weekday_dates = []
+
+            # Iterate through each week
+            for week in cal:
+                # Filter out Saturday (5) and Sunday (6)
+                for day_index in range(0, 5):  # Monday to Friday
+                    if week[day_index] != 0:
+                        # Append the date to the list
+                        #weekday_dates.append()
+                        session.add(Attendance(
+                            check_in='08:00',
+                            check_out='17:00',
+                            attendance_date=date(current_year, current_month, week[day_index]),
+                            employee_id=employee_id
+                        ))
+            session.commit()
+            return jsonify({'message':'Attendance Marked'}),200
+        except Exception as e:
             return jsonify({'message': str(e)}), 500

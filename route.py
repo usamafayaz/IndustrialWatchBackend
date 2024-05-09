@@ -214,5 +214,28 @@ def update_supervisor():
     response = EmployeeController.update_supervisor(data)
     return response
 
+@app.route('/api/Employee/GetAllEmployees', methods=['GET'])
+def get_all_employees():
+    section_id = request.args.get('section_id')
+    response = EmployeeController.get_all_employees(section_id)
+    return response
+
+@app.route('/api/Employee/GetEmployeeDetail', methods=['GET'])
+def get_employee_detail():
+    employee_id = request.args.get('employee_id')
+    response = EmployeeController.get_employee_detail(employee_id)
+    return response
+@app.route('/api/Employee/GetEmployeeAttendance', methods=['GET'])
+def get_employee_attendance():
+    employee_id = request.args.get('employee_id')
+    response = EmployeeController.get_employee_attendance(employee_id)
+    return response
+@app.route('/api/Employee/MarkAttendance', methods=['GET'])
+def mark_attendance():
+    employee_id = request.args.get('employee_id')
+    response = EmployeeController.mark_attendance(employee_id)
+    return response
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=False)

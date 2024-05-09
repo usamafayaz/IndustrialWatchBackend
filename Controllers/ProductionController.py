@@ -358,8 +358,7 @@ def get_defected_images(folder_path):
 
         zip_buffer.seek(0)
 
-        return send_file(zip_buffer, mimetype='application/zip', as_attachment=True,
-                         download_name=f"{folder_path.split(os.path.sep)[-1]}.zip")
+        return send_file(zip_buffer, mimetype='application/zip', as_attachment=True, download_name=f"{folder_path.split(os.path.sep)[-1]}.zip")
 
     except Exception as e:
         return jsonify({'message': str(e)}), 500
