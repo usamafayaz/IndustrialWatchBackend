@@ -4,7 +4,7 @@ from flask import Flask, jsonify, request, send_from_directory
 import Util
 
 app = Flask(__name__)
-app.config['EmployeeImages'] = 'EmployeeImages'  # folder name
+app.config['EmployeeImages'] = 'EmployeeImages'
 
 
 ############### Production Controller
@@ -208,7 +208,7 @@ def get_supervisor_detail():
     response = EmployeeController.get_supervisor_detail(supervisor_id)
     return response
 
-@app.route('/api/Employee/UpdateSupervisor', methods=['POST'])
+@app.route('/api/Employee/UpdateSupervisor', methods=['PUT'])
 def update_supervisor():
     data = request.get_json()
     response = EmployeeController.update_supervisor(data)
@@ -235,6 +235,10 @@ def mark_attendance():
     employee_id = request.args.get('employee_id')
     response = EmployeeController.mark_attendance(employee_id)
     return response
+
+@app.route('/api/EmployeeImage/<path:image_path>', methods=['GET'])
+def get_image(image_path):
+    return send_from_directory('EmployeeImages', image_path)
 
 
 if __name__ == '__main__':
