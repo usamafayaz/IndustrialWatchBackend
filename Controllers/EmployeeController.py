@@ -9,7 +9,9 @@ from Models.SectionRule import SectionRule
 from Models.Section import Section
 from Models.JobRole import JobRole
 from Models.EmployeeImages import EmployeeImages
+from Models.ProductivityRule import ProductivityRule
 from Models.EmployeeProductivity import EmployeeProductivity
+from Models.ViolationImages import ViolationImages
 from Models.Attendance import Attendance
 from Models.User import User
 from route import app
@@ -362,5 +364,77 @@ def mark_attendance(employee_id):
                         ))
             session.commit()
             return jsonify({'message':'Attendance Marked'}),200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+def add_violation():
+    pass
+
+
+def get_employee_violations(employee_id):
+    with DBHandler.return_session() as session:
+        try:
+            violations = session.query(Violation, ProductivityRule.name.label("rule_name")) \
+                .join(ProductivityRule, Violation.rule_id == ProductivityRule.id) \
+                .filter(Violation.employee_id == employee_id) \
+                .all()
+            serialized_violations = []
+            for violation, rule_name in violations:
+                images = get_violation_images(violation.id)
+                obj = {
+                    "violation_id" : violation.id,
+                    "date" : violation.date,
+                    "time" : str(violation.start_time),
+                    "rule_name" : rule_name,
+                    "images" : images
+                }
+                serialized_violations.append(obj)
+            return jsonify(serialized_violations), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+
+def get_violation_images(violation_id):
+    with DBHandler.return_session() as session:
+        try:
+            violation_images = session.query(ViolationImages.image_url) \
+                .join(Violation, Violation.id == ViolationImages.violation_id) \
+                .join(Employee, Employee.id == Violation.employee_id) \
+                .filter(ViolationImages.violation_id == violation_id) \
+                .all()
+            images = []
+            for image in violation_images:
+                images.append(image.image_url)
+            return images
+        except Exception as e:
+            return []
+
+def get_violation_details(violation_id):
+    with DBHandler.return_session() as session:
+        try:
+            violation = session.query(
+                Violation.id.label('violation_id'),
+                Violation.date,
+                Violation.start_time.label('time'),
+                ProductivityRule.name.label('rule_name'),
+                Section.name.label('section_name')
+            ).select_from(Violation) \
+                .join(ProductivityRule, Violation.rule_id == ProductivityRule.id) \
+                .join(EmployeeSection, Violation.employee_id == EmployeeSection.employee_id) \
+                .join(Section, EmployeeSection.section_id == Section.id) \
+                .filter(Violation.id == violation_id) \
+                .first()
+            if violation is None:
+                return jsonify({"message":"Violation not found"}), 404
+            images = get_violation_images(violation_id)
+            serialized_violation = {
+                "violation_id" : violation.violation_id,
+                "date" : violation.date,
+                "time" : str(violation.time),
+                "rule_name" : violation.rule_name,
+                "section_name" : violation.section_name,
+                "images" : images
+            }
+            return jsonify(serialized_violation), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500

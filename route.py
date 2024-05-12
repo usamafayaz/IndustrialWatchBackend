@@ -10,7 +10,8 @@ app.config['EmployeeImages'] = 'EmployeeImages'
 ############### Production Controller
 @app.route('/api/Production/AddRawMaterial', methods=['POST'])
 def add_raw_material():
-    response = ProductionController.add_raw_material(request.args.get('name'))
+    data = request.get_json()
+    response = ProductionController.add_raw_material(data['name'])
     return response
 
 
@@ -240,6 +241,17 @@ def mark_attendance():
 def get_image(image_path):
     return send_from_directory('EmployeeImages', image_path)
 
+@app.route('/api/Employee/GetAllViolations', methods=['GET'])
+def get_all_violations():
+    employee_id = request.args.get('employee_id')
+    response = EmployeeController.get_employee_violations(employee_id)
+    return response
+
+@app.route('/api/Employee/GetViolationDetails', methods=['GET'])
+def get_violation_detail():
+    violation_id = request.args.get('violation_id')
+    response = EmployeeController.get_violation_details(violation_id)
+    return response
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=False)
