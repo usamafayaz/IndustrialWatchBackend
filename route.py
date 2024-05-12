@@ -10,8 +10,7 @@ app.config['EmployeeImages'] = 'EmployeeImages'
 ############### Production Controller
 @app.route('/api/Production/AddRawMaterial', methods=['POST'])
 def add_raw_material():
-    data = request.get_json()
-    response = ProductionController.add_raw_material(data['name'])
+    response = ProductionController.add_raw_material(request.args.get('name'))
     return response
 
 
