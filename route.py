@@ -217,7 +217,8 @@ def update_supervisor():
 @app.route('/api/Employee/GetAllEmployees', methods=['GET'])
 def get_all_employees():
     section_id = request.args.get('section_id')
-    response = EmployeeController.get_all_employees(section_id)
+    ranking_required = request.args.get('ranking_required')
+    response = EmployeeController.get_all_employees(section_id,ranking_required)
     return response
 
 @app.route('/api/Employee/GetEmployeeDetail', methods=['GET'])
@@ -250,6 +251,13 @@ def get_all_violations():
 def get_violation_detail():
     violation_id = request.args.get('violation_id')
     response = EmployeeController.get_violation_details(violation_id)
+    return response
+
+@app.route('/api/Employee/GetEmployeeSummary', methods=['GET'])
+def get_employee_summary():
+    employee_id = request.args.get('employee_id')
+    date = request.args.get('date')
+    response = EmployeeController.get_employee_summary(employee_id,date)
     return response
 
 if __name__ == '__main__':

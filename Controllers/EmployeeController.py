@@ -51,6 +51,7 @@ def add_employee(data):
             else:
                 user_role = 'Employee'
             user = add_user(data.get('username'), data.get('password'), user_role)
+
             if user is None:
                 return jsonify({'message': 'Error in adding employee,Try again'}), 500
             employee = Employee(name=data.get('name'), salary=data.get('salary'),
@@ -58,6 +59,9 @@ def add_employee(data):
                                 job_type=data.get('job_type'), date_of_joining=Util.get_current_date(),
                                 gender=data.get('gender'), user_id=user.id)
             session.add(employee)
+            session.commit()
+            productivity = EmployeeProductivity(employee_id=employee.id, productivity=100, productivity_month= datetime.today().strftime('%Y-%m-%d'))
+            session.add(productivity)
             session.commit()
             is_images_saved = add_employee_images(employee.name, employee.id, data.get('images'))
             if is_images_saved is False:
@@ -244,27 +248,50 @@ def update_supervisor(data):
             return jsonify({'message': str(e)}), 500
 
 
-def get_all_employees(section_id):
+def get_all_employees(section_id,ranking_required):
     with DBHandler.return_session() as session:
         try:
-            if int(section_id) == -1:
-                employees = session.query(Employee.id, Employee.name, Section.name, EmployeeProductivity.productivity) \
-                    .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
-                    .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
-                    .join(Section, EmployeeSection.section_id == Section.id) \
-                    .all()
+            if (int(ranking_required)==0):
+                if int(section_id) == -1:
+                    employees = session.query(Employee.id, Employee.name, Section.name, EmployeeProductivity.productivity) \
+                        .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                        .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
+                        .join(Section, EmployeeSection.section_id == Section.id) \
+                        .all()
+                else:
+                    employees = session.query(Employee.id, Employee.name, Section.name, EmployeeProductivity.productivity) \
+                        .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                        .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
+                        .join(Section, EmployeeSection.section_id == Section.id) \
+                        .filter(EmployeeSection.section_id == section_id) \
+                        .all()
             else:
-                employees = session.query(Employee.id, Employee.name, Section.name, EmployeeProductivity.productivity) \
-                    .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
-                    .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
-                    .join(Section, EmployeeSection.section_id == Section.id) \
-                    .filter(EmployeeSection.section_id == section_id) \
-                    .all()
+                current_date = datetime.now()
+                if int(section_id) == -1:
+                    employees = session.query(Employee.id, Employee.name, Employee.date_of_joining, Section.name,
+                                              EmployeeProductivity.productivity) \
+                        .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                        .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
+                        .join(Section, EmployeeSection.section_id == Section.id) \
+                        .filter(Employee.date_of_joining <= current_date - timedelta(days=15)) \
+                        .order_by(EmployeeProductivity.productivity.desc()) \
+                        .all()
+                else:
+                    employees = session.query(Employee.id, Employee.name, Employee.date_of_joining, Section.name,
+                                              EmployeeProductivity.productivity) \
+                        .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                        .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
+                        .join(Section, EmployeeSection.section_id == Section.id) \
+                        .filter(Employee.date_of_joining <= current_date - timedelta(days=15)) \
+                        .filter(EmployeeSection.section_id == section_id) \
+                        .order_by(EmployeeProductivity.productivity.desc()) \
+                        .all()
             serialize = []
             if len(employees) == 0:
                 return jsonify({'message': 'No Record Found'}), 404
             for employee in employees:
-                images = session.query(EmployeeImages.image_url).filter(EmployeeImages.employee_id == employee[0]).all()
+                images = session.query(EmployeeImages.image_url).filter(
+                    EmployeeImages.employee_id == employee[0]).all()
                 image_urls = [image[0] for image in images]
                 serialize.append({
                     'employee_id': employee[0],
@@ -334,8 +361,6 @@ def get_employee_attendance(employee_id):
 
             return jsonify(serialize_attendance), 200
 
-        except Exception as e:
-            return jsonify({'message': str(e)}), 500
 
         except Exception as e:
             return jsonify({'message': str(e)}), 500
@@ -438,3 +463,14 @@ def get_violation_details(violation_id):
             return jsonify(serialized_violation), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
+def get_employee_summary(employee_id, date):
+    with DBHandler.return_session() as session:
+        try:
+            month = int(date.split(',')[0])
+            year = int(date.split(',')[1])
+            print(month, "  ", year )
+            return jsonify(0)
+        except Exception as e :
+            return jsonify({'message': str(e)}), 500
+
