@@ -485,3 +485,49 @@ def get_employee_summary(employee_id, date):
             return jsonify(0)
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
+
+def get_employee_profile(employee_id):
+    try:
+        with DBHandler.return_session() as session:
+            employee_details = session.query(Employee.name, Employee.job_type, JobRole.name.label('job_role_name'),
+                                             Section.name.label('section_name'), User.username, User.password,
+                                             EmployeeImages.image_url) \
+                .join(JobRole, Employee.job_role_id == JobRole.id) \
+                .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                .join(Section, EmployeeSection.section_id == Section.id) \
+                .join(User, User.id == Employee.user_id) \
+                .join(EmployeeImages, EmployeeImages.employee_id == Employee.id) \
+                .filter(Employee.id == employee_id).first()
+            if employee_details:
+                return jsonify({
+                    'name': employee_details[0],
+                    'job_type': employee_details[1],
+                    'job_role': employee_details[2],
+                    'section': employee_details[3],
+                    'username': employee_details[4],
+                    'password': employee_details[5],
+                    'image': employee_details[6],
+                })
+            else:
+                return jsonify({'message': 'Employee not found'}), 404
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+def update_employee_profile(data):
+    with DBHandler.return_session() as session:
+        try:
+            employee = session.query(Employee).filter(Employee.id == data['id']).first()
+            user = session.query(User).join(Employee, Employee.user_id == User.id).filter(
+                Employee.id == data['id']).first()
+            if employee and user:
+                employee.name = data['name']
+                user.username = data['username']
+                user.password = data['password']
+                session.commit()
+                return jsonify({'message': 'Information Updated'}), 200
+            else:
+                return jsonify({'message': 'An Error Occured'}), 404
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500

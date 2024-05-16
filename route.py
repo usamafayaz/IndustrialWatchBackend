@@ -152,11 +152,13 @@ def update_section():
     response = SectionController.update_section(data)
     return response
 
+
 @app.route('/api/Section/ChangeSectionAcitivityStatus', methods=['GET'])
 def change_section_activity_status():
     section_id = request.args.get('section_id')
     response = SectionController.change_section_activity_status(section_id)
     return response
+
 
 @app.route('/api/Section/GetAllRule', methods=['GET'])
 def get_all_rules():
@@ -191,10 +193,12 @@ def add_employee():
     response = EmployeeController.add_employee(data)
     return response
 
+
 @app.route('/api/Employee/GetAllJobRoles', methods=['GET'])
 def get_all_job_roles():
     response = EmployeeController.get_all_job_roles()
     return response
+
 
 @app.route('/api/Employee/GetAllSupervisors', methods=['GET'])
 def get_all_supervisors():
@@ -208,38 +212,47 @@ def get_supervisor_detail():
     response = EmployeeController.get_supervisor_detail(supervisor_id)
     return response
 
+
 @app.route('/api/Employee/UpdateSupervisor', methods=['PUT'])
 def update_supervisor():
     data = request.get_json()
     response = EmployeeController.update_supervisor(data)
     return response
 
+
 @app.route('/api/Employee/GetAllEmployees', methods=['GET'])
 def get_all_employees():
     section_id = request.args.get('section_id')
     ranking_required = request.args.get('ranking_required')
-    response = EmployeeController.get_all_employees(section_id,ranking_required)
+    response = EmployeeController.get_all_employees(section_id, ranking_required)
     return response
+
 
 @app.route('/api/Employee/GetEmployeeDetail', methods=['GET'])
 def get_employee_detail():
     employee_id = request.args.get('employee_id')
     response = EmployeeController.get_employee_detail(employee_id)
     return response
+
+
 @app.route('/api/Employee/GetEmployeeAttendance', methods=['GET'])
 def get_employee_attendance():
     employee_id = request.args.get('employee_id')
     response = EmployeeController.get_employee_attendance(employee_id)
     return response
+
+
 @app.route('/api/Employee/MarkAttendance', methods=['GET'])
 def mark_attendance():
     employee_id = request.args.get('employee_id')
     response = EmployeeController.mark_attendance(employee_id)
     return response
 
+
 @app.route('/api/EmployeeImage/<path:image_path>', methods=['GET'])
 def get_image(image_path):
     return send_from_directory('EmployeeImages', image_path)
+
 
 @app.route('/api/Employee/GetAllViolations', methods=['GET'])
 def get_all_violations():
@@ -247,18 +260,35 @@ def get_all_violations():
     response = EmployeeController.get_employee_violations(employee_id)
     return response
 
+
 @app.route('/api/Employee/GetViolationDetails', methods=['GET'])
 def get_violation_detail():
     violation_id = request.args.get('violation_id')
     response = EmployeeController.get_violation_details(violation_id)
     return response
 
+
 @app.route('/api/Employee/GetEmployeeSummary', methods=['GET'])
 def get_employee_summary():
     employee_id = request.args.get('employee_id')
     date = request.args.get('date')
-    response = EmployeeController.get_employee_summary(employee_id,date)
+    response = EmployeeController.get_employee_summary(employee_id, date)
     return response
+
+
+@app.route('/api/Employee/GetEmployeeProfile', methods=['GET'])
+def get_employee_profile():
+    employee_id = request.args.get('employee_id')
+    response = EmployeeController.get_employee_profile(employee_id)
+    return response
+
+
+@app.route('/api/Employee/UpdateEmployeeProfile', methods=['PUT'])
+def update_employee_profile():
+    data = request.get_json()
+    response = EmployeeController.update_employee_profile(data)
+    return response
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=False)
