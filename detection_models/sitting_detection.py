@@ -4,7 +4,7 @@ import mediapipe as mp
 
 def is_sitting(results):
     # Criteria for sitting posture
-    # Check if hips are below knees are bent
+    # Check if hips are slightly above or at the level of knees
     left_hip_y = results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.LEFT_HIP].y
     right_hip_y = results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.RIGHT_HIP].y
     left_knee_y = results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.LEFT_KNEE].y
@@ -13,21 +13,19 @@ def is_sitting(results):
     hip_height = (left_hip_y + right_hip_y) / 2
     knee_height = (left_knee_y + right_knee_y) / 2
 
-    # print('Hip: ', hip_height, 'Knee: ', knee_height)
-    if knee_height < hip_height or hip_height == knee_height:
-        return True
-    else:
-        return False
+    # Allow a small margin for the knees to be slightly lower than the hips
+    return knee_height < hip_height + 0.1
 
 
 def main():
     # Load the video
-    video_path = "assets/v1.mp4"
+    video_path = "assets/v7.mp4"
     cap = cv2.VideoCapture(video_path)
 
     # Initialize MediaPipe Pose Detection
     mp_pose = mp.solutions.pose
-    pose = mp_pose.Pose()
+    pose = mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.7, min_tracking_confidence=0.7)
+    drawing_utils = mp.solutions.drawing_utils
 
     while cap.isOpened():
         # Read frame from the video
@@ -43,8 +41,11 @@ def main():
 
         # Draw pose landmarks on the frame
         if results.pose_landmarks:
-            mp.solutions.drawing_utils.draw_landmarks(
-                frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+            drawing_utils.draw_landmarks(
+                frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
+                drawing_utils.DrawingSpec(color=(0, 0, 255), thickness=2, circle_radius=2),  # Red connections
+                drawing_utils.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)  # Green keypoints
+            )
 
         # Determine if the person is sitting or not
         if results.pose_landmarks:

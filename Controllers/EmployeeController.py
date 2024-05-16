@@ -15,7 +15,7 @@ from Models.ViolationImages import ViolationImages
 from Models.Attendance import Attendance
 from Models.User import User
 from route import app
-from sqlalchemy import delete,func
+from sqlalchemy import delete, func
 import calendar
 from datetime import date, timedelta, datetime
 
@@ -60,7 +60,8 @@ def add_employee(data):
                                 gender=data.get('gender'), user_id=user.id)
             session.add(employee)
             session.commit()
-            productivity = EmployeeProductivity(employee_id=employee.id, productivity=100, productivity_month= datetime.today().strftime('%Y-%m-%d'))
+            productivity = EmployeeProductivity(employee_id=employee.id, productivity=100,
+                                                productivity_month=datetime.today().strftime('%Y-%m-%d'))
             session.add(productivity)
             session.commit()
             is_images_saved = add_employee_images(employee.name, employee.id, data.get('images'))
@@ -248,41 +249,45 @@ def update_supervisor(data):
             return jsonify({'message': str(e)}), 500
 
 
-def get_all_employees(section_id,ranking_required):
+def get_all_employees(section_id, ranking_required):
     with DBHandler.return_session() as session:
         try:
-            if (int(ranking_required)==0):
+            if int(ranking_required) == 0:
                 if int(section_id) == -1:
-                    employees = session.query(Employee.id, Employee.name, Section.name, EmployeeProductivity.productivity) \
+                    employees = session.query(Employee.id, Employee.name, Section.name, JobRole.name,
+                                              EmployeeProductivity.productivity) \
                         .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
                         .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
                         .join(Section, EmployeeSection.section_id == Section.id) \
+                        .join(JobRole, Employee.job_role_id == JobRole.id) \
                         .all()
                 else:
-                    employees = session.query(Employee.id, Employee.name, Section.name, EmployeeProductivity.productivity) \
+                    employees = session.query(Employee.id, Employee.name, Section.name, JobRole.name,
+                                              EmployeeProductivity.productivity) \
                         .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
                         .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
                         .join(Section, EmployeeSection.section_id == Section.id) \
+                        .join(JobRole, Employee.job_role_id == JobRole.id) \
                         .filter(EmployeeSection.section_id == section_id) \
                         .all()
             else:
                 current_date = datetime.now()
                 if int(section_id) == -1:
-                    employees = session.query(Employee.id, Employee.name, Employee.date_of_joining, Section.name,
+                    employees = session.query(Employee.id, Employee.name, Section.name, JobRole.name,
                                               EmployeeProductivity.productivity) \
                         .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
                         .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
                         .join(Section, EmployeeSection.section_id == Section.id) \
-                        .filter(Employee.date_of_joining <= current_date - timedelta(days=15)) \
+                        .join(JobRole, Employee.job_role_id == JobRole.id) \
                         .order_by(EmployeeProductivity.productivity.desc()) \
                         .all()
                 else:
-                    employees = session.query(Employee.id, Employee.name, Employee.date_of_joining, Section.name,
+                    employees = session.query(Employee.id, Employee.name, Section.name, JobRole.name,
                                               EmployeeProductivity.productivity) \
                         .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
                         .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
                         .join(Section, EmployeeSection.section_id == Section.id) \
-                        .filter(Employee.date_of_joining <= current_date - timedelta(days=15)) \
+                        .join(JobRole, Employee.job_role_id == JobRole.id) \
                         .filter(EmployeeSection.section_id == section_id) \
                         .order_by(EmployeeProductivity.productivity.desc()) \
                         .all()
@@ -297,7 +302,8 @@ def get_all_employees(section_id,ranking_required):
                     'employee_id': employee[0],
                     'name': employee[1],
                     'section_name': employee[2],
-                    'productivity': employee[3],
+                    'job_role': employee[3],
+                    'productivity': employee[4],
                     'image': image_urls[0]
                 })
             return jsonify(serialize), 200
@@ -311,15 +317,17 @@ def get_employee_detail(employee_id):
             total_fine = session.query(func.sum(SectionRule.fine)) \
                 .join(EmployeeSection, EmployeeSection.section_id == SectionRule.section_id) \
                 .join(Violation, (Violation.rule_id == SectionRule.rule_id) & (
-                        Violation.employee_id == EmployeeSection.employee_id)) \
+                    Violation.employee_id == EmployeeSection.employee_id)) \
                 .filter(Violation.employee_id == employee_id) \
                 .scalar()
-            productivity=session.query(EmployeeProductivity.productivity).filter(EmployeeProductivity.employee_id==employee_id).scalar()
+            productivity = session.query(EmployeeProductivity.productivity).filter(
+                EmployeeProductivity.employee_id == employee_id).scalar()
             if total_fine is None:
-                total_fine=0
-        return jsonify({'total_fine':total_fine,'productivity':productivity})
+                total_fine = 0
+        return jsonify({'total_fine': total_fine, 'productivity': productivity})
     except Exception as e:
         return jsonify({'message': str(e)}), 500
+
 
 def get_employee_attendance(employee_id):
     with DBHandler.return_session() as session:
@@ -365,6 +373,7 @@ def get_employee_attendance(employee_id):
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
+
 def mark_attendance(employee_id):
     with DBHandler.return_session() as session:
         try:
@@ -380,7 +389,7 @@ def mark_attendance(employee_id):
                 for day_index in range(0, 5):  # Monday to Friday
                     if week[day_index] != 0:
                         # Append the date to the list
-                        #weekday_dates.append()
+                        # weekday_dates.append()
                         session.add(Attendance(
                             check_in='08:00',
                             check_out='17:00',
@@ -388,13 +397,14 @@ def mark_attendance(employee_id):
                             employee_id=employee_id
                         ))
             session.commit()
-            return jsonify({'message':'Attendance Marked'}),200
+            return jsonify({'message': 'Attendance Marked'}), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
-def add_violation():
-    pass
 
+# def add_violation():
+#     pass
+#
 
 def get_employee_violations(employee_id):
     with DBHandler.return_session() as session:
@@ -407,11 +417,11 @@ def get_employee_violations(employee_id):
             for violation, rule_name in violations:
                 images = get_violation_images(violation.id)
                 obj = {
-                    "violation_id" : violation.id,
-                    "date" : violation.date,
-                    "time" : str(violation.start_time),
-                    "rule_name" : rule_name,
-                    "images" : images
+                    "violation_id": violation.id,
+                    "date": violation.date.strftime("%d-%m-%Y"),
+                    "time": violation.start_time.strftime("%H:%M"),
+                    "rule_name": rule_name,
+                    "images": images
                 }
                 serialized_violations.append(obj)
             return jsonify(serialized_violations), 200
@@ -434,6 +444,7 @@ def get_violation_images(violation_id):
         except Exception as e:
             return []
 
+
 def get_violation_details(violation_id):
     with DBHandler.return_session() as session:
         try:
@@ -450,27 +461,27 @@ def get_violation_details(violation_id):
                 .filter(Violation.id == violation_id) \
                 .first()
             if violation is None:
-                return jsonify({"message":"Violation not found"}), 404
+                return jsonify({"message": "Violation not found"}), 404
             images = get_violation_images(violation_id)
             serialized_violation = {
-                "violation_id" : violation.violation_id,
-                "date" : violation.date,
-                "time" : str(violation.time),
-                "rule_name" : violation.rule_name,
-                "section_name" : violation.section_name,
-                "images" : images
+                "violation_id": violation.violation_id,
+                "date": violation.date,
+                "time": str(violation.time),
+                "rule_name": violation.rule_name,
+                "section_name": violation.section_name,
+                "images": images
             }
             return jsonify(serialized_violation), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
 
 def get_employee_summary(employee_id, date):
     with DBHandler.return_session() as session:
         try:
             month = int(date.split(',')[0])
             year = int(date.split(',')[1])
-            print(month, "  ", year )
+            print(month, "  ", year)
             return jsonify(0)
-        except Exception as e :
+        except Exception as e:
             return jsonify({'message': str(e)}), 500
-
