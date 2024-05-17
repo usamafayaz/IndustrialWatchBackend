@@ -325,9 +325,22 @@ def get_employee_detail(employee_id):
                 .scalar()
             productivity = session.query(EmployeeProductivity.productivity).filter(
                 EmployeeProductivity.employee_id == employee_id).scalar()
+
+            now = datetime.now()
+            current_year = now.year
+            current_month = now.month
+            total_days_in_month = now.day
+            total_working_days = session.query(func.count(Attendance.id)).filter(
+                func.year(Attendance.attendance_date) == current_year,
+                func.month(Attendance.attendance_date) == current_month,
+                Attendance.employee_id == employee_id
+            ).scalar()
+
+            total_attendance = f"{total_working_days}/{total_days_in_month}"
+
             if total_fine is None:
                 total_fine = 0
-        return jsonify({'total_fine': total_fine, 'productivity': productivity})
+            return jsonify({'total_fine': total_fine, 'productivity': productivity, "total_attendance": total_attendance})
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
