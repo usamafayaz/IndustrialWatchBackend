@@ -537,7 +537,7 @@ def get_employee_summary(employee_id, date):
                         if attendance_date in attendance_dict:
                             present_days += 1
 
-                attendance_rate = f"{present_days}/{total_days}"
+                attendance_rate = f"{present_days}/{num_days}"
 
             # Serialize the summary
             serialize_summary = {
