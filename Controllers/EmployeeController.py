@@ -493,12 +493,13 @@ def get_employee_summary(employee_id, date):
                 func.sum(SectionRule.fine),
                 func.count(Violation.id)
             ) \
-            .join(EmployeeSection, EmployeeSection.section_id == SectionRule.section_id) \
-            .join(Violation, (Violation.rule_id == SectionRule.rule_id) & (Violation.employee_id == EmployeeSection.employee_id)) \
-            .filter(Violation.employee_id == employee_id) \
-            .filter(extract('year', Violation.date) == year) \
-            .filter(extract('month', Violation.date) == month) \
-            .first()
+                .join(EmployeeSection, EmployeeSection.section_id == SectionRule.section_id) \
+                .join(Violation, (Violation.rule_id == SectionRule.rule_id) & (
+                        Violation.employee_id == EmployeeSection.employee_id)) \
+                .filter(Violation.employee_id == employee_id) \
+                .filter(extract('year', Violation.date) == year) \
+                .filter(extract('month', Violation.date) == month) \
+                .first()
 
             if result:
                 total_fine = result[0] if result[0] is not None else 0
@@ -550,6 +551,7 @@ def get_employee_summary(employee_id, date):
 
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
 
 def get_employee_profile(employee_id):
     try:
