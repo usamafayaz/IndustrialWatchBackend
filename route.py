@@ -275,7 +275,6 @@ def get_employee_summary():
     response = EmployeeController.get_employee_summary(employee_id, date)
     return response
 
-
 @app.route('/api/Employee/GetEmployeeProfile', methods=['GET'])
 def get_employee_profile():
     employee_id = request.args.get('employee_id')

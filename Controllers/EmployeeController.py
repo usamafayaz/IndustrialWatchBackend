@@ -1,23 +1,26 @@
-import os, time
+import calendar
+import os
+import time
+from datetime import date, datetime
+
 from flask import jsonify
+from sqlalchemy import func, extract
+
 import DBHandler
 import Util
-from Models.Employee import Employee
-from Models.EmployeeSection import EmployeeSection
-from Models.Violation import Violation
-from Models.SectionRule import SectionRule
-from Models.Section import Section
-from Models.JobRole import JobRole
-from Models.EmployeeImages import EmployeeImages
-from Models.ProductivityRule import ProductivityRule
-from Models.EmployeeProductivity import EmployeeProductivity
-from Models.ViolationImages import ViolationImages
 from Models.Attendance import Attendance
+from Models.Employee import Employee
+from Models.EmployeeImages import EmployeeImages
+from Models.EmployeeProductivity import EmployeeProductivity
+from Models.EmployeeSection import EmployeeSection
+from Models.JobRole import JobRole
+from Models.ProductivityRule import ProductivityRule
+from Models.Section import Section
+from Models.SectionRule import SectionRule
 from Models.User import User
+from Models.Violation import Violation
+from Models.ViolationImages import ViolationImages
 from route import app
-from sqlalchemy import delete, func
-import calendar
-from datetime import date, timedelta, datetime
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
@@ -479,13 +482,74 @@ def get_violation_details(violation_id):
 def get_employee_summary(employee_id, date):
     with DBHandler.return_session() as session:
         try:
-            month = int(date.split(',')[0])
-            year = int(date.split(',')[1])
-            print(month, "  ", year)
-            return jsonify(0)
+            # Parse the month and year from the date string
+            month, year = map(int, date.split(','))
+
+            total_fine = 0
+            violation_count = 0
+
+            # Fetch the total fine and violation count
+            result = session.query(
+                func.sum(SectionRule.fine),
+                func.count(Violation.id)
+            ) \
+            .join(EmployeeSection, EmployeeSection.section_id == SectionRule.section_id) \
+            .join(Violation, (Violation.rule_id == SectionRule.rule_id) & (Violation.employee_id == EmployeeSection.employee_id)) \
+            .filter(Violation.employee_id == employee_id) \
+            .filter(extract('year', Violation.date) == year) \
+            .filter(extract('month', Violation.date) == month) \
+            .first()
+
+            if result:
+                total_fine = result[0] if result[0] is not None else 0
+                violation_count = result[1]
+
+            # Fetch attendance records
+            attendance = session.query(Attendance).filter(
+                Attendance.employee_id == int(employee_id),
+                extract('year', Attendance.attendance_date) == year,
+                extract('month', Attendance.attendance_date) == month
+            ).all()
+
+            # Handle case where no attendance records are found
+            if not attendance:
+                attendance_rate = 'N/A'
+            else:
+                # Create a dictionary to store attendance by date
+                attendance_dict = {att.attendance_date.strftime("%Y-%m-%d"): att for att in attendance}
+
+                # Get the total number of days in the specified month
+                _, num_days = calendar.monthrange(year, month)
+
+                # Initialize counters
+                total_days = 0
+                present_days = 0
+
+                # Iterate through each day of the month
+                for day in range(1, num_days + 1):
+                    attendance_date = datetime(year, month, day).strftime("%Y-%m-%d")
+                    current_date = datetime.strptime(attendance_date, "%Y-%m-%d")
+
+                    # Check if the day is a weekday (Monday to Friday)
+                    if current_date.weekday() < 5:
+                        total_days += 1
+                        # If the attendance record exists for the date, mark as present
+                        if attendance_date in attendance_dict:
+                            present_days += 1
+
+                attendance_rate = f"{present_days}/{total_days}"
+
+            # Serialize the summary
+            serialize_summary = {
+                "total_fine": total_fine,
+                "violation_count": violation_count,
+                "attendance_rate": attendance_rate
+            }
+
+            return jsonify(serialize_summary), 200
+
         except Exception as e:
             return jsonify({'message': str(e)}), 500
-
 
 def get_employee_profile(employee_id):
     try:
