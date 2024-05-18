@@ -340,7 +340,8 @@ def get_employee_detail(employee_id):
 
             if total_fine is None:
                 total_fine = 0
-            return jsonify({'total_fine': total_fine, 'productivity': productivity, "total_attendance": total_attendance})
+            return jsonify(
+                {'total_fine': total_fine, 'productivity': productivity, "total_attendance": total_attendance})
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
@@ -508,7 +509,7 @@ def get_employee_summary(employee_id, date):
             ) \
                 .join(EmployeeSection, EmployeeSection.section_id == SectionRule.section_id) \
                 .join(Violation, (Violation.rule_id == SectionRule.rule_id) & (
-                        Violation.employee_id == EmployeeSection.employee_id)) \
+                    Violation.employee_id == EmployeeSection.employee_id)) \
                 .filter(Violation.employee_id == employee_id) \
                 .filter(extract('year', Violation.date) == year) \
                 .filter(extract('month', Violation.date) == month) \

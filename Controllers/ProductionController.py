@@ -1,16 +1,21 @@
-import datetime, time, os, io, zipfile
+import datetime
+import io
+import os
+import time
+import zipfile
+
 from flask import jsonify, send_file
 from sqlalchemy import select, func, join, outerjoin
+
 import DBHandler
 import Util
-from Models.RawMaterial import RawMaterial
+from Models.Batch import Batch
 from Models.Product import Product
 from Models.ProductFormula import ProductFormula
 from Models.ProductLink import ProductLink
-
-from Models.StockInBatch import StockInBatch
+from Models.RawMaterial import RawMaterial
 from Models.Stock import Stock
-from Models.Batch import Batch
+from Models.StockInBatch import StockInBatch
 
 
 def add_raw_material(name):
@@ -358,10 +363,12 @@ def get_defected_images(folder_path):
 
         zip_buffer.seek(0)
 
-        return send_file(zip_buffer, mimetype='application/zip', as_attachment=True, download_name=f"{folder_path.split(os.path.sep)[-1]}.zip")
+        return send_file(zip_buffer, mimetype='application/zip', as_attachment=True,
+                         download_name=f"{folder_path.split(os.path.sep)[-1]}.zip")
 
     except Exception as e:
         return jsonify({'message': str(e)}), 500
+
 
 def calculate_yield():
     # Todo

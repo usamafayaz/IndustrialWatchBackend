@@ -1,7 +1,6 @@
-import os
-from Controllers import ProductionController, EmployeeController, SectionController
 from flask import Flask, jsonify, request, send_from_directory
-import Util
+
+from Controllers import ProductionController, EmployeeController, SectionController
 
 app = Flask(__name__)
 app.config['EmployeeImages'] = 'EmployeeImages'
@@ -274,6 +273,7 @@ def get_employee_summary():
     date = request.args.get('date')
     response = EmployeeController.get_employee_summary(employee_id, date)
     return response
+
 
 @app.route('/api/Employee/GetEmployeeProfile', methods=['GET'])
 def get_employee_profile():

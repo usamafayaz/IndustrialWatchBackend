@@ -1,9 +1,8 @@
-import json
+from flask import jsonify
 from sqlalchemy import select
+
 import DBHandler
 from Models.User import User
-from flask import jsonify
-from sqlalchemy.orm import Session
 
 
 def insert_user(data):
@@ -46,7 +45,7 @@ def update_user(data):
             user.role = data.get('role')
             session.commit()
             serialized_user = {'id': user.id, 'name': user.username, 'password': user.password, 'role': user.role}
-            return jsonify(serialized_user),200
+            return jsonify(serialized_user), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
