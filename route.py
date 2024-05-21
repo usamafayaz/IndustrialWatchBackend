@@ -4,6 +4,7 @@ from Controllers import ProductionController, EmployeeController, SectionControl
 
 app = Flask(__name__)
 app.config['EmployeeImages'] = 'EmployeeImages'
+app.config['ViolationImages'] = 'ViolationImages'
 
 
 ############### Production Controller
@@ -259,6 +260,9 @@ def get_all_violations():
     response = EmployeeController.get_employee_violations(employee_id)
     return response
 
+@app.route('/api/EmployeeViolationImage/<path:image_path>', methods=['GET'])
+def get_violation_image(image_path):
+    return send_from_directory('ViolationImages', image_path)
 
 @app.route('/api/Employee/GetViolationDetails', methods=['GET'])
 def get_violation_detail():
