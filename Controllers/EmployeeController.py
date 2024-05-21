@@ -329,6 +329,8 @@ def get_employee_detail(employee_id):
             now = datetime.now()
             current_year = now.year
             current_month = now.month
+            _, num_days = calendar.monthrange(current_year, current_month)
+
             total_days_in_month = now.day
             total_working_days = session.query(func.count(Attendance.id)).filter(
                 func.year(Attendance.attendance_date) == current_year,
@@ -336,7 +338,7 @@ def get_employee_detail(employee_id):
                 Attendance.employee_id == employee_id
             ).scalar()
 
-            total_attendance = f"{total_working_days}/{total_days_in_month}"
+            total_attendance = f"{total_working_days}/{num_days}"
 
             if total_fine is None:
                 total_fine = 0
