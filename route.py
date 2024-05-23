@@ -249,9 +249,9 @@ def mark_attendance():
     return response
 
 
-@app.route('/api/EmployeeImage/<path:image_path>', methods=['GET'])
-def get_image(image_path):
-    return send_from_directory('EmployeeImages', image_path)
+@app.route('/api/EmployeeImage/<int:employee_id>/<path:image_path>', methods=['GET'])
+def get_image(employee_id,image_path):
+    return send_from_directory(f'EmployeeImages/{employee_id}', image_path)
 
 
 @app.route('/api/Employee/GetAllViolations', methods=['GET'])
