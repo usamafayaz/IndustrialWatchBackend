@@ -21,6 +21,8 @@ from Models.User import User
 from Models.Violation import Violation
 from Models.ViolationImages import ViolationImages
 from route import app
+from detection_models.facenet_training import FacenetTraining
+from detection_models.facenet_predict import FaceRecognition
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
@@ -76,6 +78,8 @@ def add_employee(data):
             if is_employee_added_to_sec is False:
                 delete_user_and_employee(user, employee)
                 return jsonify({'message': 'Error in adding employee,Try again'}), 500
+            training_manager = FacenetTraining()
+            training_manager.train_model()
             return jsonify({'message': 'Employee Added Successfully'}), 200
         except Exception as e:
             delete_user_and_employee(user, employee)
@@ -113,15 +117,17 @@ def allowed_file(filename):
 def add_employee_images(name, employee_id, images_list):
     with DBHandler.return_session() as session:
         try:
-            if not os.path.exists('EmployeeImages'):
-                os.makedirs('EmployeeImages')
+            employee_directory = os.path.join('EmployeeImages', str(employee_id))
+            if not os.path.exists(employee_directory):
+                os.makedirs(employee_directory)
             for image in images_list:
                 if image and allowed_file(image.filename):
                     filename = Util.get_formatted_number(Util.get_first_three_characters(name)) + \
                                image.filename
+                    image_path = os.path.join(employee_directory, filename)
                     image.save(os.path.join(app.config['EmployeeImages'], filename))
-                    session.add(EmployeeImages(employee_id=employee_id, image_url=filename))
-                    time.sleep(1)
+                    session.add(EmployeeImages(employee_id=employee_id, image_url=image_path))
+                    time.sleep(1)  # Adding delay to ensure unique timestamps for file names
                     session.commit()
             return True
         except Exception as e:
