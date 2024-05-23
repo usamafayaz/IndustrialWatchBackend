@@ -130,6 +130,6 @@ if __name__ == '__main__':
 
     face_recognition = FaceRecognition()
 
-    prediction = face_recognition.predict("usama4.jpeg")
+    prediction = face_recognition.predict("assets/usama4.jpeg")
     if prediction is not None:
         print(f"Predicted class: {prediction}")

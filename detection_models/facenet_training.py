@@ -15,7 +15,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 class FacenetTraining:
     def __init__(self):
-        self.directory = "../EmployeeImages"
+        # self.directory = "../EmployeeImages"
+        self.directory = os.path.join(os.pardir, 'EmployeeImages')
         self.target_size = (160, 160)
         self.detector = MTCNN()
         self.embedder = FaceNet()

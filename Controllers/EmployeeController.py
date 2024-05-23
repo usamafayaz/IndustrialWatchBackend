@@ -23,6 +23,7 @@ from Models.ViolationImages import ViolationImages
 from route import app
 from detection_models.facenet_training import FacenetTraining
 from detection_models.facenet_predict import FaceRecognition
+import threading
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
@@ -78,12 +79,20 @@ def add_employee(data):
             if is_employee_added_to_sec is False:
                 delete_user_and_employee(user, employee)
                 return jsonify({'message': 'Error in adding employee,Try again'}), 500
-            training_manager = FacenetTraining()
-            training_manager.train_model()
+            training_thread = threading.Thread(target=train_model_in_thread)
+            training_thread.start()
             return jsonify({'message': 'Employee Added Successfully'}), 200
         except Exception as e:
             delete_user_and_employee(user, employee)
             return jsonify({'message': str(e)}), 500
+
+
+def train_model_in_thread():
+    try:
+        training_manager = FacenetTraining()
+        training_manager.train_model()
+    except Exception as e:
+        print(f"Error occurred during model training: {str(e)}")
 
 
 def add_user(username, password, user_role):
@@ -115,24 +124,23 @@ def allowed_file(filename):
 
 
 def add_employee_images(name, employee_id, images_list):
-    with DBHandler.return_session() as session:
-        try:
-            employee_directory = os.path.join('EmployeeImages', str(employee_id))
-            if not os.path.exists(employee_directory):
-                os.makedirs(employee_directory)
-            for image in images_list:
-                if image and allowed_file(image.filename):
-                    filename = Util.get_formatted_number(Util.get_first_three_characters(name)) + \
-                               image.filename
-                    image_path = os.path.join(employee_directory, filename)
-                    image.save(os.path.join(app.config['EmployeeImages'], filename))
+    try:
+        employee_directory = os.path.join('EmployeeImages', str(employee_id))
+        if not os.path.exists(employee_directory):
+            os.makedirs(employee_directory)
+        for image in images_list:
+            if image and allowed_file(image.filename):
+                filename = Util.get_formatted_number(Util.get_first_three_characters(name)) + \
+                           image.filename
+                image_path = os.path.join(employee_directory, filename)
+                image.save(image_path)
+                with DBHandler.return_session() as session:
                     session.add(EmployeeImages(employee_id=employee_id, image_url=image_path))
-                    time.sleep(1)  # Adding delay to ensure unique timestamps for file names
                     session.commit()
-            return True
-        except Exception as e:
-            return False
-
+                time.sleep(1)
+        return True
+    except Exception as e:
+        return False
 
 def add_employee_to_section(employee_id, section_id, ):
     with DBHandler.return_session() as session:
