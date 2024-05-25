@@ -1,6 +1,8 @@
+import os.path
+
 from flask import Flask, jsonify, request, send_from_directory
 
-from Controllers import ProductionController, EmployeeController, SectionController
+from Controllers import ProductionController, EmployeeController, SectionController,AutomationController
 
 app = Flask(__name__)
 app.config['EmployeeImages'] = 'EmployeeImages'
@@ -291,7 +293,25 @@ def update_employee_profile():
     data = request.get_json()
     response = EmployeeController.update_employee_profile(data)
     return response
+@app.route('/api/Automation/PredictEmployeeViolation', methods=['POST'])
+def predict_employee_violation():
+    if 'files' not in request.files:
+        return jsonify({'message': 'No files part'}), 400
 
+    files = request.files.getlist('files')
+    if not files:
+        return jsonify({'message': 'No files selected'}), 400
+
+    file = files[0]
+    video_path = os.path.join(app.config['EmployeeImages'], file.filename)
+    file.save(video_path)
+
+    # Extract frame from video
+    response = AutomationController.extract_frame_from(video_path)
+    if response is None:
+        return jsonify({'message': 'Unable to Save Frame'}), 500
+
+    return jsonify({'message': response}), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=False)
+    app.run(host='0.0.0.0', debug=True)
