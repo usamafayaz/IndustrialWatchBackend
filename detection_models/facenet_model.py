@@ -119,6 +119,7 @@
 #
 # with open('svm_model_160x160.pkl', 'wb') as f:
 #     pickle.dump(model, f)
+import cv2
 
 from facenet_training import FacenetTraining
 from facenet_predict import FaceRecognition
@@ -129,7 +130,7 @@ if __name__ == '__main__':
     # training_manager.train_model()
 
     face_recognition = FaceRecognition()
-
-    prediction = face_recognition.predict("assets/usama4.jpeg")
+    img = cv2.imread("assets/raahim.jpg")
+    prediction = face_recognition.predict(img)
     if prediction is not None:
         print(f"Predicted class: {prediction}")

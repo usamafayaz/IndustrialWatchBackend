@@ -627,3 +627,5 @@ def update_employee_profile(data):
                 return jsonify({'message': 'An Error Occured'}), 404
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
+

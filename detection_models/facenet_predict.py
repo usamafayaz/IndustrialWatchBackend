@@ -8,8 +8,8 @@ from sklearn.preprocessing import LabelEncoder
 
 class FaceRecognition:
     def __init__(self):
-        self.model_path = 'svm_model_160x160.pkl'
-        self.encoder_path = 'faces_embeddings_done_classes.npz'
+        self.model_path = 'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\detection_models\svm_model_160x160.pkl'
+        self.encoder_path = 'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\detection_models\\faces_embeddings_done_classes.npz'
 
         # Load the trained SVM model
         with open(self.model_path, 'rb') as f:
@@ -31,9 +31,9 @@ class FaceRecognition:
         yhat = self.embedder.embeddings(face_img)
         return yhat[0]
 
-    def predict(self, image_path):
-        t_im = cv.imread(image_path)
-        t_im = cv.cvtColor(t_im, cv.COLOR_BGR2RGB)
+    def predict(self, image):
+        # t_im = cv.imread(image)
+        t_im = cv.cvtColor(image, cv.COLOR_BGR2RGB)
         result = self.detector.detect_faces(t_im)
         print("Detection result:", result)
 

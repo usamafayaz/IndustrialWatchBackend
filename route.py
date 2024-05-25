@@ -1,3 +1,4 @@
+import json
 import os.path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -303,15 +304,16 @@ def predict_employee_violation():
         return jsonify({'message': 'No files selected'}), 400
 
     file = files[0]
-    video_path = os.path.join(app.config['EmployeeImages'], file.filename)
+    video_path = os.path.join('temp_videos', 'tempvideo.mp4')
     file.save(video_path)
 
+
     # Extract frame from video
-    response = AutomationController.extract_frame_from(video_path)
+    response = AutomationController.detect_employee_violation(video_path)
+
     if response is None:
         return jsonify({'message': 'Unable to Save Frame'}), 500
-
-    return jsonify({'message': response}), 200
+    return response
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    app.run(host='0.0.0.0', debug=False)
