@@ -11,13 +11,14 @@ from Models.EmployeeSection import EmployeeSection
 from Models.ProductivityRule import ProductivityRule
 from Models.Section import Section
 from Models.SectionRule import SectionRule
+from Models.Violation import Violation
 from detection_models.facenet_predict import FaceRecognition
 
-time_list = []
 timeIntervals = {
     "start_time": None,
     "end_time": None
 }
+
 
 def detect_employee_violation(file_path):
     employee = is_industry_employee(file_path)
@@ -29,12 +30,16 @@ def detect_employee_violation(file_path):
             if rule['rule_id'] == 1:
                 print('Mobile detection Chalao')
                 t = threading.Thread(target=apply_detection_model, args=(
-                    file_path, '../trained_models/mobile_detection.pt', employee['employee_id'], 67, 1))
+                    file_path,
+                    f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\\trained_models\mobile_detection.pt',
+                    employee['employee_id'], 67, 1, rule['allowed_time']))
                 threads.append(t)
             elif rule['rule_id'] == 2:
                 print('Smoke detection Chalao')
                 t = threading.Thread(target=apply_detection_model, args=(
-                    file_path, '../trained_models/cigarette_model.pt', employee['employee_id'], 0, 2))
+                    file_path,
+                    f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\\trained_models\cigarette_model.pt',
+                    employee['employee_id'], 0, 2, rule['allowed_time']))
                 threads.append(t)
             elif rule['rule_id'] == 3:
                 print('Sitting detection Chalao')
@@ -63,11 +68,12 @@ def predict_with_model(img, model):
     return img_with_boxes, class_id
 
 
-def apply_detection_model(video_path, model_path, employee_id, detection_class_id, rule_id):
+def apply_detection_model(video_path, model_path, employee_id, detection_class_id, rule_id, allowed_time):
     model = YOLO(model_path)
     handle = cv.VideoCapture(video_path)
-    if not os.path.exists(f'Violation/{employee_id}/{rule_id}'):
-        os.makedirs(f'Violation/{employee_id}/{rule_id}')
+    violation_image_path = f'Violation/{employee_id}/{rule_id}'
+    if not os.path.exists(violation_image_path):
+        os.makedirs(violation_image_path)
     total_frames = int(handle.get(cv.CAP_PROP_FRAME_COUNT))
     fps = int(handle.get(cv.CAP_PROP_FPS))
     frame_interval = fps // 5  # 5 is desired frame
@@ -96,12 +102,6 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
                     violation_occurence += 1
                     cv.imwrite(f'Violation/{employee_id}/{rule_id}/{frame_count}.jpg', img_with_boxes)
                     # cv.imshow("Frame", img_with_boxes)
-                else:
-                    if timeIntervals["start_time"] is not None:
-                        start_time_dt = datetime.strptime(timeIntervals["start_time"], '%H:%M:%S')
-                        end_time_dt = start_time_dt + timedelta(seconds=total_time)
-                        timeIntervals["end_time"] = end_time_dt.strftime('%H:%M:%S')
-                        time_list.append(timeIntervals)
         if i % 30 == 0 and i != 0 and violation_occurence == 3:
             total_time += 1
             print(f'clss id {rule_id} total time is  {total_time}')
@@ -111,7 +111,6 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
         print(f"Frame Count: {frame_count}")
 
     print(f'Total Time: {total_time} for violation {rule_id}')
-    print(f"Total Time list: {time_list}")
 
     if timeIntervals["start_time"] is not None:
         start_time_dt = datetime.strptime(timeIntervals["start_time"], '%H:%M:%S')
@@ -120,71 +119,41 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
 
     print(f'Time Interval = {timeIntervals}')
     handle.release()
+
     print("Frames saved successfully.")
+    violation = get_violation(employee_id, rule_id)
+    if violation is not False:
+        with DBHandler.return_session() as session:
+            try:
+                violation.end_time = timeIntervals["end_time"]
+                session.commit()
+            except Exception as e:
+                print(f'Exception Occured, {str(e)}')
+    elif violation is False:
+        with DBHandler.return_session() as session:
+            try:
+                violation_obj = Violation(employee_id=employee_id, rule_id=rule_id,
+                                          date=datetime.now().strftime('%Y-%m-%d'),
+                                          start_time=timeIntervals["start_time"], end_time=timeIntervals["end_time"])
+                session.add(violation_obj)
+                session.commit()
+
+            except Exception as e:
+                print(f'Exception Occured, {str(e)}')
 
 
-# control_frame_rate('assets/anees2.mp4', 5)
-
-def mobile_detection(file_path):
-    handle = cv.VideoCapture(file_path)
-    if not os.path.exists("Frames"):
-        os.makedirs("Frames")
-    total_frames = int(handle.get(cv.CAP_PROP_FRAME_COUNT))
-    fps = int(handle.get(cv.CAP_PROP_FPS))
-    frame_interval = fps // 5
-    frame_count = 0
-    print(f"FPS of the video: {fps}")
-    total_time = 0
-    is_start = False
-    mobile_occurence = 0
-
-    for i in range(0, total_frames, frame_interval):
-        handle.set(cv.CAP_PROP_POS_FRAMES, i)
-        ret, frame = handle.read()
-
-        if not ret:
-            break
-
-        if mobile_occurence != 3:
-            img_with_boxes, class_id = predict_with_model(frame)
-            print(f"Predicting Frame Number: {i}")
-
-            if class_id != None:
-                if class_id == 67:  # Start Time
-                    if not is_start:
-                        timeIntervals["start_time"] = datetime.now().strftime('%H:%M:%S')
-                        is_start = True
-                    mobile_occurence += 1
-                    cv.imwrite(f'Frames/frame_{frame_count}.jpg', img_with_boxes)
-                    # cv.imshow("Frame", img_with_boxes)
-                else:
-                    if timeIntervals["start_time"] is not None:
-                        start_time_dt = datetime.strptime(timeIntervals["start_time"], '%H:%M:%S')
-                        end_time_dt = start_time_dt + timedelta(seconds=total_time)
-                        timeIntervals["end_time"] = end_time_dt.strftime('%H:%M:%S')
-                        time_list.append(timeIntervals)
-        if i % 30 == 0 and i != 0 and mobile_occurence == 3:
-            total_time += 1
-            mobile_occurence = 0
-
-        frame_count += 1
-        print(f"Frame Count: {frame_count}")
-
-    print(f"Total Time: {total_time}")
-    print(f"Total Time list: {time_list}")
-
-    if timeIntervals["start_time"] is not None:
-        start_time_dt = datetime.strptime(timeIntervals["start_time"], '%H:%M:%S')
-        end_time_dt = start_time_dt + timedelta(seconds=total_time)
-        timeIntervals["end_time"] = end_time_dt.strftime('%H:%M:%S')
-
-    print(f'Time Interval = {timeIntervals}')
-    handle.release()
-    print("Frames saved successfully.")
-
-
-def smoking_detection():
-    pass
+def get_violation(employee_id, rule_id):
+    with DBHandler.return_session() as session:
+        try:
+            violation = session.query(Violation).filter(Violation.employee_id == employee_id).filter(
+                Violation.rule_id == rule_id).filter(Violation.date == datetime.now().strftime('%Y-%m-%d')).first()
+            if violation:
+                return violation
+            else:
+                return False
+        except Exception as e:
+            print(f'Exception Occured, {str(e)}')
+            return None
 
 
 def sitting_detection():
