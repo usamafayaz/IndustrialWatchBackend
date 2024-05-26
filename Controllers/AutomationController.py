@@ -121,11 +121,16 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
     handle.release()
 
     print("Frames saved successfully.")
-    violation = get_violation(employee_id, rule_id)
-    if violation is not False:
+    violation_flag = get_violation(employee_id, rule_id)
+    if violation_flag is not False:
         with DBHandler.return_session() as session:
             try:
-                violation.end_time = timeIntervals["end_time"]
+                violation = session.query(Violation).filter(Violation.employee_id == employee_id).filter(
+                    Violation.rule_id == rule_id).filter(Violation.date == datetime.now().strftime('%Y-%m-%d')).first()
+                end_time = datetime.strptime(str(violation.end_time), '%H:%M:%S')
+                print("Before Adding this Violation", violation.end_time)
+                violation.end_time = str((end_time + timedelta(seconds=total_time)).strftime('%H:%M:%S'))
+                print("After Adding this Violation", violation.end_time)
                 session.commit()
             except Exception as e:
                 print(f'Exception Occured, {str(e)}')
@@ -148,7 +153,7 @@ def get_violation(employee_id, rule_id):
             violation = session.query(Violation).filter(Violation.employee_id == employee_id).filter(
                 Violation.rule_id == rule_id).filter(Violation.date == datetime.now().strftime('%Y-%m-%d')).first()
             if violation:
-                return violation
+                return True
             else:
                 return False
         except Exception as e:
