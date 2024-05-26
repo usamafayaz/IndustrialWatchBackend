@@ -8,8 +8,8 @@ from sklearn.preprocessing import LabelEncoder
 
 class FaceRecognition:
     def __init__(self):
-        self.model_path = 'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\detection_models\svm_model_160x160.pkl'
-        self.encoder_path = 'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\detection_models\\faces_embeddings_done_classes.npz'
+        self.model_path = f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\detection_models\svm_model_160x160.pkl'
+        self.encoder_path = f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\detection_models\\faces_embeddings_done_classes.npz'
 
         # Load the trained SVM model
         with open(self.model_path, 'rb') as f:
@@ -45,9 +45,13 @@ class FaceRecognition:
             print("Processed image shape:", t_im.shape)
             test_im = self.get_embedding(t_im)
             test_im = np.expand_dims(test_im, axis=0)
+            predicted_probs = self.model.predict_proba(test_im)
             ypreds = self.model.predict(test_im)
             predicted_class = self.encoder.inverse_transform(ypreds)
-            return predicted_class
-        else:
-            print("No face detected.")
-            return None
+            confidence = np.max(predicted_probs)
+            print('confidence:', confidence)
+            if confidence > 0.3:
+                return predicted_class
+            else:
+                print("Employee not found")
+                return None

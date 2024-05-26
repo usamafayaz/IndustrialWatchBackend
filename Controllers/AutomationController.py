@@ -1,59 +1,217 @@
-import  cv2 as cv
 import os
-from detection_models.facenet_predict import FaceRecognition
-from Controllers import  SectionController
+import threading
+from datetime import datetime, timedelta
+
+import cv2 as cv
 from flask import jsonify
+from ultralytics import YOLO
+
+import DBHandler
 from Models.EmployeeSection import EmployeeSection
+from Models.ProductivityRule import ProductivityRule
 from Models.Section import Section
 from Models.SectionRule import SectionRule
-from Models.ProductivityRule import ProductivityRule
-import DBHandler
-from flask import jsonify
+from detection_models.facenet_predict import FaceRecognition
 
+time_list = []
+timeIntervals = {
+    "start_time": None,
+    "end_time": None
+}
 
-def detect_employee_violation(file):
-    employee = is_industry_employee(file)
+def detect_employee_violation(file_path):
+    employee = is_industry_employee(file_path)
     if employee is None:
-        return jsonify({'meassage' : 'Employee Not Found'}), 404
+        return jsonify({'meassage': 'Employee Not Found'}), 404
     else:
+        threads = []
         for rule in employee['section_rules']:
             if rule['rule_id'] == 1:
-                mobile_detection()
+                print('Mobile detection Chalao')
+                t = threading.Thread(target=apply_detection_model, args=(
+                    file_path, '../trained_models/mobile_detection.pt', employee['employee_id'], 67, 1))
+                threads.append(t)
             elif rule['rule_id'] == 2:
-                smoking_detection()
+                print('Smoke detection Chalao')
+                t = threading.Thread(target=apply_detection_model, args=(
+                    file_path, '../trained_models/cigarette_model.pt', employee['employee_id'], 0, 2))
+                threads.append(t)
             elif rule['rule_id'] == 3:
-                sitting_detection()
-        return jsonify({'meassage' : 'Employee Found'}), 200
+                print('Sitting detection Chalao')
+                t = threading.Thread(target=sitting_detection)
+                threads.append(t)
+
+        # Start all threads
+        for t in threads:
+            t.start()
+
+        # Wait for all threads to complete
+        for t in threads:
+            t.join()
+        return jsonify({'meassage': 'Employee Found'}), 200
 
 
-def mobile_detection():
-    pass
+def predict_with_model(img, model):
+    results = model.predict(img, classes=[0, 67], save=True, imgsz=640, show_boxes=True, show_labels=True, show=True)
+    class_id = None
+    for result in results:
+        boxes = result.boxes
+        print(boxes)
+        for box in boxes:
+            class_id = int(box.cls)
+        img_with_boxes = result.plot()
+    return img_with_boxes, class_id
+
+
+def apply_detection_model(video_path, model_path, employee_id, detection_class_id, rule_id):
+    model = YOLO(model_path)
+    handle = cv.VideoCapture(video_path)
+    if not os.path.exists(f'Violation/{employee_id}/{rule_id}'):
+        os.makedirs(f'Violation/{employee_id}/{rule_id}')
+    total_frames = int(handle.get(cv.CAP_PROP_FRAME_COUNT))
+    fps = int(handle.get(cv.CAP_PROP_FPS))
+    frame_interval = fps // 5  # 5 is desired frame
+    frame_count = 0
+    print(f"FPS of the video: {fps}")
+    total_time = 0
+    is_start = False
+    violation_occurence = 0
+
+    for i in range(0, total_frames, frame_interval):
+        handle.set(cv.CAP_PROP_POS_FRAMES, i)
+        ret, frame = handle.read()
+
+        if not ret:
+            break
+
+        if violation_occurence != 3:
+            img_with_boxes, class_id = predict_with_model(frame, model)
+            print(f"Predicting Frame Number: {i}")
+
+            if class_id != None:
+                if class_id == detection_class_id:  # Start Time
+                    if not is_start:
+                        timeIntervals["start_time"] = datetime.now().strftime('%H:%M:%S')
+                        is_start = True
+                    violation_occurence += 1
+                    cv.imwrite(f'Violation/{employee_id}/{rule_id}/{frame_count}.jpg', img_with_boxes)
+                    # cv.imshow("Frame", img_with_boxes)
+                else:
+                    if timeIntervals["start_time"] is not None:
+                        start_time_dt = datetime.strptime(timeIntervals["start_time"], '%H:%M:%S')
+                        end_time_dt = start_time_dt + timedelta(seconds=total_time)
+                        timeIntervals["end_time"] = end_time_dt.strftime('%H:%M:%S')
+                        time_list.append(timeIntervals)
+        if i % 30 == 0 and i != 0 and violation_occurence == 3:
+            total_time += 1
+            print(f'clss id {rule_id} total time is  {total_time}')
+            violation_occurence = 0
+
+        frame_count += 1
+        print(f"Frame Count: {frame_count}")
+
+    print(f'Total Time: {total_time} for violation {rule_id}')
+    print(f"Total Time list: {time_list}")
+
+    if timeIntervals["start_time"] is not None:
+        start_time_dt = datetime.strptime(timeIntervals["start_time"], '%H:%M:%S')
+        end_time_dt = start_time_dt + timedelta(seconds=total_time)
+        timeIntervals["end_time"] = end_time_dt.strftime('%H:%M:%S')
+
+    print(f'Time Interval = {timeIntervals}')
+    handle.release()
+    print("Frames saved successfully.")
+
+
+# control_frame_rate('assets/anees2.mp4', 5)
+
+def mobile_detection(file_path):
+    handle = cv.VideoCapture(file_path)
+    if not os.path.exists("Frames"):
+        os.makedirs("Frames")
+    total_frames = int(handle.get(cv.CAP_PROP_FRAME_COUNT))
+    fps = int(handle.get(cv.CAP_PROP_FPS))
+    frame_interval = fps // 5
+    frame_count = 0
+    print(f"FPS of the video: {fps}")
+    total_time = 0
+    is_start = False
+    mobile_occurence = 0
+
+    for i in range(0, total_frames, frame_interval):
+        handle.set(cv.CAP_PROP_POS_FRAMES, i)
+        ret, frame = handle.read()
+
+        if not ret:
+            break
+
+        if mobile_occurence != 3:
+            img_with_boxes, class_id = predict_with_model(frame)
+            print(f"Predicting Frame Number: {i}")
+
+            if class_id != None:
+                if class_id == 67:  # Start Time
+                    if not is_start:
+                        timeIntervals["start_time"] = datetime.now().strftime('%H:%M:%S')
+                        is_start = True
+                    mobile_occurence += 1
+                    cv.imwrite(f'Frames/frame_{frame_count}.jpg', img_with_boxes)
+                    # cv.imshow("Frame", img_with_boxes)
+                else:
+                    if timeIntervals["start_time"] is not None:
+                        start_time_dt = datetime.strptime(timeIntervals["start_time"], '%H:%M:%S')
+                        end_time_dt = start_time_dt + timedelta(seconds=total_time)
+                        timeIntervals["end_time"] = end_time_dt.strftime('%H:%M:%S')
+                        time_list.append(timeIntervals)
+        if i % 30 == 0 and i != 0 and mobile_occurence == 3:
+            total_time += 1
+            mobile_occurence = 0
+
+        frame_count += 1
+        print(f"Frame Count: {frame_count}")
+
+    print(f"Total Time: {total_time}")
+    print(f"Total Time list: {time_list}")
+
+    if timeIntervals["start_time"] is not None:
+        start_time_dt = datetime.strptime(timeIntervals["start_time"], '%H:%M:%S')
+        end_time_dt = start_time_dt + timedelta(seconds=total_time)
+        timeIntervals["end_time"] = end_time_dt.strftime('%H:%M:%S')
+
+    print(f'Time Interval = {timeIntervals}')
+    handle.release()
+    print("Frames saved successfully.")
+
+
 def smoking_detection():
     pass
+
+
 def sitting_detection():
     pass
 
 
-def is_industry_employee(file):
-    image = extract_frame_from(file)
+def is_industry_employee(file_path):
+    image = extract_frame_from(file_path)
     if image is not None:
         facerecoganizer = FaceRecognition()
         person = facerecoganizer.predict(image)
-
+        print("dsadsad", person)
         if person is not None and person != 'No face detected':
             print(f'Prediction = {person[0]}')
             section_id = get_employee_section_id(int(person[0]))
+            # Add Attendance ~~~~
             print(f'Prediction = {section_id}')
             section_detail = get_section_detail(section_id)
             employee = {
-                'employee_id' : int(person[0]),
-                'section_rules' : []
+                'employee_id': int(person[0]),
+                'section_rules': []
             }
             for rule in section_detail['rules']:
                 obj = {
-                    'rule_id' : rule['rule_id'],
-                    'fine' : rule['fine'],
-                    'allowed_time' : rule['allowed_time']
+                    'rule_id': rule['rule_id'],
+                    'fine': rule['fine'],
+                    'allowed_time': rule['allowed_time']
                 }
                 employee['section_rules'].append(obj)
             return employee
@@ -61,6 +219,7 @@ def is_industry_employee(file):
             return None
     else:
         return None
+
 
 def extract_frame_from(video_path):
     try:
@@ -82,12 +241,13 @@ def extract_frame_from(video_path):
     finally:
         cam.release()
 
+
 def get_section_detail(id):
     with DBHandler.return_session() as session:
         try:
             section = session.query(Section).filter(Section.id == id).first()
             if section == None:
-                print( jsonify({'message': 'Section not found'}), 500)
+                print(jsonify({'message': 'Section not found'}), 500)
             print(f'Section a gya Sai')
             query = session.query(Section, SectionRule, ProductivityRule).join(SectionRule,
                                                                                Section.id == SectionRule.section_id).join(
@@ -109,8 +269,6 @@ def get_section_detail(id):
         except Exception as e:
             print(jsonify({'message': str(e)}), 500)
             return None
-
-
 
 
 def get_employee_section_id(employee_id):

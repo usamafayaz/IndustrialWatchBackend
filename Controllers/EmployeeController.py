@@ -22,7 +22,6 @@ from Models.Violation import Violation
 from Models.ViolationImages import ViolationImages
 from route import app
 from detection_models.facenet_training import FacenetTraining
-from detection_models.facenet_predict import FaceRecognition
 import threading
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
@@ -135,7 +134,7 @@ def add_employee_images(name, employee_id, images_list):
                 image_path = os.path.join(employee_directory, filename)
                 image.save(image_path)
                 with DBHandler.return_session() as session:
-                    session.add(EmployeeImages(employee_id=employee_id, image_url=image_path))
+                    session.add(EmployeeImages(employee_id=employee_id, image_url=filename))
                     session.commit()
                 time.sleep(1)
         return True
