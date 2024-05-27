@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 from datetime import datetime, timedelta
 
 import cv2 as cv
@@ -7,12 +8,16 @@ from flask import jsonify
 from ultralytics import YOLO
 
 import DBHandler
+import Util
+from Models.Attendance import Attendance
 from Models.EmployeeSection import EmployeeSection
 from Models.ProductivityRule import ProductivityRule
 from Models.Section import Section
 from Models.SectionRule import SectionRule
 from Models.Violation import Violation
+from Models.ViolationImages import ViolationImages
 from detection_models.facenet_predict import FaceRecognition
+from trained_models import sitting_model
 
 timeIntervals = {
     "start_time": None,
@@ -23,7 +28,7 @@ timeIntervals = {
 def detect_employee_violation(file_path):
     employee = is_industry_employee(file_path)
     if employee is None:
-        return jsonify({'meassage': 'Employee Not Found'}), 404
+        return jsonify({'message': 'Employee Not Found'}), 404
     else:
         threads = []
         for rule in employee['section_rules']:
@@ -43,7 +48,8 @@ def detect_employee_violation(file_path):
                 threads.append(t)
             elif rule['rule_id'] == 3:
                 print('Sitting detection Chalao')
-                t = threading.Thread(target=sitting_detection)
+                t = threading.Thread(target=sitting_detection,
+                                     args=(file_path, employee['employee_id'], 3, rule['allowed_time']))
                 threads.append(t)
 
         # Start all threads
@@ -53,7 +59,7 @@ def detect_employee_violation(file_path):
         # Wait for all threads to complete
         for t in threads:
             t.join()
-        return jsonify({'meassage': 'Employee Found'}), 200
+        return jsonify({'message': 'Employee Found'}), 200
 
 
 def predict_with_model(img, model):
@@ -71,7 +77,7 @@ def predict_with_model(img, model):
 def apply_detection_model(video_path, model_path, employee_id, detection_class_id, rule_id, allowed_time):
     model = YOLO(model_path)
     handle = cv.VideoCapture(video_path)
-    violation_image_path = f'Violation/{employee_id}/{rule_id}'
+    violation_image_path = f'ViolationImages/{employee_id}'
     if not os.path.exists(violation_image_path):
         os.makedirs(violation_image_path)
     total_frames = int(handle.get(cv.CAP_PROP_FRAME_COUNT))
@@ -82,7 +88,7 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
     total_time = 0
     is_start = False
     violation_occurence = 0
-
+    violationsCaptureWithImage = []
     for i in range(0, total_frames, frame_interval):
         handle.set(cv.CAP_PROP_POS_FRAMES, i)
         ret, frame = handle.read()
@@ -100,7 +106,9 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
                         timeIntervals["start_time"] = datetime.now().strftime('%H:%M:%S')
                         is_start = True
                     violation_occurence += 1
-                    cv.imwrite(f'Violation/{employee_id}/{rule_id}/{frame_count}.jpg', img_with_boxes)
+                    violationsCaptureWithImage.append(
+                        {'capture_time': datetime.now().strftime('%H:%M:%S'), 'image': img_with_boxes})
+                    # cv.imwrite(f'Violation/{employee_id}/{rule_id}/{frame_count}.jpg', img_with_boxes)
                     # cv.imshow("Frame", img_with_boxes)
         if i % 30 == 0 and i != 0 and violation_occurence == 3:
             total_time += 1
@@ -125,16 +133,20 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
     if violation_flag is not False:
         with DBHandler.return_session() as session:
             try:
+                # updating existing violation time
                 violation = session.query(Violation).filter(Violation.employee_id == employee_id).filter(
                     Violation.rule_id == rule_id).filter(Violation.date == datetime.now().strftime('%Y-%m-%d')).first()
                 end_time = datetime.strptime(str(violation.end_time), '%H:%M:%S')
                 print("Before Adding this Violation", violation.end_time)
                 violation.end_time = str((end_time + timedelta(seconds=total_time)).strftime('%H:%M:%S'))
                 print("After Adding this Violation", violation.end_time)
+                add_violation_images(violation_image_path, violationsCaptureWithImage, violation.id, employee_id,
+                                     violation.rule_id)
                 session.commit()
             except Exception as e:
                 print(f'Exception Occured, {str(e)}')
-    elif violation is False:
+    elif violation_flag is False:
+        # adding new violation
         with DBHandler.return_session() as session:
             try:
                 violation_obj = Violation(employee_id=employee_id, rule_id=rule_id,
@@ -142,9 +154,16 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
                                           start_time=timeIntervals["start_time"], end_time=timeIntervals["end_time"])
                 session.add(violation_obj)
                 session.commit()
+                new_violation = session.query(Violation).filter(Violation.employee_id == employee_id) \
+                    .filter(Violation.rule_id == rule_id) \
+                    .filter(Violation.date == violation_obj.date).first()
+                if new_violation is not None:
+                    add_violation_images(violation_image_path, violationsCaptureWithImage, new_violation.id,
+                                         employee_id,
+                                         rule_id)
 
             except Exception as e:
-                print(f'Exception Occured, {str(e)}')
+                print(f'Exception occurred, {str(e)}')
 
 
 def get_violation(employee_id, rule_id):
@@ -157,12 +176,97 @@ def get_violation(employee_id, rule_id):
             else:
                 return False
         except Exception as e:
-            print(f'Exception Occured, {str(e)}')
+            print(f'Exception Occurred, {str(e)}')
             return None
 
 
-def sitting_detection():
-    pass
+def sitting_detection(video_path, employee_id, rule_id, allowed_time):
+    handle = cv.VideoCapture(video_path)
+    violation_image_path = f'ViolationImages/{employee_id}'
+    if not os.path.exists(violation_image_path):
+        os.makedirs(violation_image_path)
+    total_frames = int(handle.get(cv.CAP_PROP_FRAME_COUNT))
+    fps = int(handle.get(cv.CAP_PROP_FPS))
+    frame_interval = fps // 5  # 5 is desired frame
+    frame_count = 0
+    print(f"FPS of the video: {fps}")
+    total_time = 0
+    is_start = False
+    violation_occurence = 0
+    violationsCaptureWithImage = []
+    for i in range(0, total_frames, frame_interval):
+        handle.set(cv.CAP_PROP_POS_FRAMES, i)
+        ret, frame = handle.read()
+
+        if not ret:
+            break
+
+        if violation_occurence != 3:
+            isSitting = sitting_model.sitting_detection_(frame)
+            if isSitting:
+                if not is_start:
+                    timeIntervals["start_time"] = datetime.now().strftime('%H:%M:%S')
+                    is_start = True
+                violation_occurence += 1
+                violationsCaptureWithImage.append(
+                    {'capture_time': datetime.now().strftime('%H:%M:%S'), 'image': frame})
+                # cv.imwrite(f'Violation/{employee_id}/{rule_id}/{frame_count}.jpg', img_with_boxes)
+                # cv.imshow("Frame", img_with_boxes)
+
+        if i % 30 == 0 and i != 0 and violation_occurence == 3:
+            total_time += 1
+            print(f'clss id {rule_id} total time is  {total_time}')
+            violation_occurence = 0
+
+        frame_count += 1
+        print(f"Frame Count: {frame_count}")
+
+    print(f'Total Time: {total_time} for violation {rule_id}')
+
+    if timeIntervals["start_time"] is not None:
+        start_time_dt = datetime.strptime(timeIntervals["start_time"], '%H:%M:%S')
+        end_time_dt = start_time_dt + timedelta(seconds=total_time)
+        timeIntervals["end_time"] = end_time_dt.strftime('%H:%M:%S')
+
+    print(f'Time Interval = {timeIntervals}')
+    handle.release()
+
+    print("Frames saved successfully.")
+    violation_flag = get_violation(employee_id, rule_id)
+    if violation_flag is not False:
+        with DBHandler.return_session() as session:
+            try:
+                # updating existing violation time
+                violation = session.query(Violation).filter(Violation.employee_id == employee_id).filter(
+                    Violation.rule_id == rule_id).filter(Violation.date == datetime.now().strftime('%Y-%m-%d')).first()
+                end_time = datetime.strptime(str(violation.end_time), '%H:%M:%S')
+                print("Before Adding this Violation", violation.end_time)
+                violation.end_time = str((end_time + timedelta(seconds=total_time)).strftime('%H:%M:%S'))
+                print("After Adding this Violation", violation.end_time)
+                add_violation_images(violation_image_path, violationsCaptureWithImage, violation.id, employee_id,
+                                     rule_id)
+                session.commit()
+            except Exception as e:
+                print(f'Exception Occurred, {str(e)}')
+    elif violation_flag is False:
+        # adding new violation
+        with DBHandler.return_session() as session:
+            try:
+                violation_obj = Violation(employee_id=employee_id, rule_id=rule_id,
+                                          date=datetime.now().strftime('%Y-%m-%d'),
+                                          start_time=timeIntervals["start_time"], end_time=timeIntervals["end_time"])
+                session.add(violation_obj)
+
+                session.commit()
+                new_violation=session.query(Violation).filter(Violation.employee_id==employee_id)\
+                .filter(Violation.rule_id==rule_id)\
+                    .filter(Violation.date==violation_obj.date).first()
+                if new_violation is not None:
+                    add_violation_images(violation_image_path, violationsCaptureWithImage, new_violation.id,
+                                         employee_id,
+                                         rule_id)
+            except Exception as e:
+                print(f'Exception occurred, {str(e)}')
 
 
 def is_industry_employee(file_path):
@@ -174,7 +278,6 @@ def is_industry_employee(file_path):
         if person is not None and person != 'No face detected':
             print(f'Prediction = {person[0]}')
             section_id = get_employee_section_id(int(person[0]))
-            # Add Attendance ~~~~
             print(f'Prediction = {section_id}')
             section_detail = get_section_detail(section_id)
             employee = {
@@ -252,3 +355,57 @@ def get_employee_section_id(employee_id):
             return section.section_id
         except Exception as e:
             return None
+
+
+def mark_attendance(video_path):
+    try:
+        with DBHandler.return_session() as session:
+            employee = is_industry_employee(video_path)
+            if employee is None:
+                print(f'employee none hai')
+
+                return jsonify({'message': 'Employee Not Found'}), 404
+            else:
+                attendance = session.query(Attendance).filter(Attendance.employee_id == employee['employee_id']).first()
+                if attendance is not None:
+                    print(f'attendance --->> {attendance.attendance_date}')
+                    attendance.check_out = datetime.now().strftime('%H:%M:%S')
+                    session.commit()
+                    return False
+                else:
+                    session.add(Attendance(
+                        check_in=datetime.now().strftime('%H:%M:%S'),
+                        attendance_date=Util.get_current_date(),
+                        employee_id=employee['employee_id']
+                    ))
+                    session.commit()
+                    return True
+    except Exception as e:
+        print(f'attendance excep-->> {str(e)}')
+        return None
+
+
+def add_violation_images(path, captured_violations, violation_id, employee_id, rule_id):
+    try:
+        with DBHandler.return_session() as session:
+            for i in captured_violations:
+                time.sleep(1)
+                image_name =Util.get_formatted_number_without_hash()
+                # path=f'ViolationImages/{employee_id}/{rule_id}'
+                # if not os.path.exists(path):
+                #     os.makedirs(path)
+                print(f'path-->>{path}')
+                print(f'rule id -->> {rule_id} and Violation id {violation_id} and Employee id {employee_id}')
+                if not os.path.exists(f'ViolationImages/{employee_id}/{rule_id}'):
+                    os.makedirs(f'ViolationImages/{employee_id}/{rule_id}')
+                image_path = os.path.join(f'ViolationImages/{employee_id}/{rule_id}', f'{image_name}.jpg')
+                cv.imwrite(image_path, i.get('image'))
+                image_path = os.path.join(f'{employee_id}/{rule_id}', f'{image_name}.jpg')
+                violation_with_image = ViolationImages(violation_id=violation_id, image_url=image_path,
+                                                       capture_time=i.get('capture_time'))
+                session.add(violation_with_image)
+            session.commit()
+            return True
+    except Exception as e:
+        print(f'excep -->> {str(e)}')
+        return False
