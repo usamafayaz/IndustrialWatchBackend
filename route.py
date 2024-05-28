@@ -10,7 +10,7 @@ app.config['EmployeeImages'] = 'EmployeeImages'
 app.config['ViolationImages'] = 'ViolationImages'
 
 
-############### Production Controller
+#%%%%%%%%%%%%%%%%%%%    ProductionController   %%%%%%%%%%%%%%%%%%%%%%%
 @app.route('/api/Production/AddRawMaterial', methods=['POST'])
 def add_raw_material():
     response = ProductionController.add_raw_material(request.args.get('name'))
@@ -126,8 +126,16 @@ def get_defected_images():
     response = ProductionController.get_defected_images(folder_path)
     return response
 
+@app.route('/api/Production/DefectMonitoring', methods=['POST'])
+def process_images():
+    images = request.files.getlist('images')
+    product_number = request.args.get('product_number')
+    batch_number = request.args.get('batch_number')
+    response = ProductionController.defect_monitoring(images, product_number, batch_number)
+    return response
 
-############################SectionController#############################
+
+#%%%%%%%%%%%%%%%%%%%    SectionController   %%%%%%%%%%%%%%%%%%%%%%%
 @app.route('/api/Section/InsertSection', methods=['POST'])
 def insert_section():
     data = request.get_json()
@@ -169,7 +177,7 @@ def get_all_rules():
     return response
 
 
-#####################  Employee Controller  #################################
+#%%%%%%%%%%%%%%%%%%%    EmployeeController   %%%%%%%%%%%%%%%%%%%%%%%
 @app.route('/api/Employee/Login', methods=['GET'])
 def login():
     response = EmployeeController.login(username=request.args.get('username'), password=request.args.get('password'))

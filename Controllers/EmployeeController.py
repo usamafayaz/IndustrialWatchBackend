@@ -1,13 +1,15 @@
 import calendar
 import os
+import threading
 import time
 from datetime import date, datetime, timedelta
-
+import json
 from flask import jsonify
 from sqlalchemy import func, extract
 
 import DBHandler
 import Util
+from Controllers import AutomationController
 from Models.Attendance import Attendance
 from Models.Employee import Employee
 from Models.EmployeeImages import EmployeeImages
@@ -20,10 +22,8 @@ from Models.SectionRule import SectionRule
 from Models.User import User
 from Models.Violation import Violation
 from Models.ViolationImages import ViolationImages
-from route import app
 from detection_models.facenet_training import FacenetTraining
-import threading
-from Controllers import AutomationController
+
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 
@@ -65,7 +65,7 @@ def add_employee(data):
                                 gender=data.get('gender'), user_id=user.id)
             session.add(employee)
             session.commit()
-            productivity = EmployeeProductivity(employee_id=employee.id, productivity=100,
+            productivity = EmployeeProductivity(employee_id=employee.id, productivity=0,
                                                 productivity_month=datetime.today().strftime('%Y-%m-%d'))
             session.add(productivity)
             session.commit()
@@ -140,6 +140,7 @@ def add_employee_images(name, employee_id, images_list):
         return True
     except Exception as e:
         return False
+
 
 def add_employee_to_section(employee_id, section_id, ):
     with DBHandler.return_session() as session:
@@ -330,33 +331,56 @@ def get_all_employees(section_id, ranking_required):
 def get_employee_detail(employee_id):
     try:
         with DBHandler.return_session() as session:
-            total_fine = session.query(func.sum(SectionRule.fine)) \
-                .join(EmployeeSection, EmployeeSection.section_id == SectionRule.section_id) \
-                .join(Violation, (Violation.rule_id == SectionRule.rule_id) & (
-                    Violation.employee_id == EmployeeSection.employee_id)) \
-                .filter(Violation.employee_id == employee_id) \
-                .scalar()
-            productivity = session.query(EmployeeProductivity.productivity).filter(
-                EmployeeProductivity.employee_id == employee_id).scalar()
-
             now = datetime.now()
             current_year = now.year
             current_month = now.month
             _, num_days = calendar.monthrange(current_year, current_month)
 
-            total_days_in_month = now.day
+            total_fine = 0
+            max_fine = 0
+            days_without_weekend = 0
+            # Fetch the total fine and violation count
+            result = session.query(Violation.start_time, Violation.end_time, Violation.date, SectionRule.allowed_time,
+                                   SectionRule.fine) \
+                .join(Employee, Violation.employee_id == Employee.id) \
+                .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                .join(Section, EmployeeSection.section_id == Section.id) \
+                .join(SectionRule, (Section.id == SectionRule.section_id) & (Violation.rule_id == SectionRule.rule_id)) \
+                .filter(EmployeeSection.employee_id == employee_id) \
+                .filter(extract('year', Violation.date) == current_year) \
+                .filter(extract('month', Violation.date) == current_month) \
+                .all()
+            if result:
+                for row in result:
+                    start_time = datetime.strptime(str(row.start_time), "%H:%M:%S")
+                    end_time = datetime.strptime(str(row.end_time), "%H:%M:%S") if row.end_time else None
+                    allowed_time = datetime.strptime(str(row.allowed_time), "%H:%M:%S")
+                    duration = end_time - start_time
+                    allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
+                                                 seconds=allowed_time.second)
+
+                    temp = ((days_without_weekend * 8) - round(
+                        ((allowed_duration.total_seconds() / 3600) * days_without_weekend), 4)) * row.fine
+                    max_fine = max_fine + temp
+                    # condition to check duration and allowed time
+                    if duration > allowed_duration:
+                        fine = ((duration - allowed_duration).total_seconds()) * (
+                                row.fine / allowed_duration.total_seconds())
+                        total_fine = total_fine + fine
             total_working_days = session.query(func.count(Attendance.id)).filter(
                 func.year(Attendance.attendance_date) == current_year,
                 func.month(Attendance.attendance_date) == current_month,
                 Attendance.employee_id == employee_id
             ).scalar()
 
+            productivity = session.query(EmployeeProductivity.productivity).filter(
+                EmployeeProductivity.employee_id == employee_id).scalar()
             total_attendance = f"{total_working_days}/{num_days}"
 
             if total_fine is None:
                 total_fine = 0
             return jsonify(
-                {'total_fine': total_fine, 'productivity': productivity, "total_attendance": total_attendance})
+                {'total_fine': total_fine, 'productivity':round(productivity,3), "total_attendance": total_attendance})
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
@@ -438,8 +462,6 @@ def mark_attendance(video_path):  # employee_id
             return jsonify({'message': str(e)}), 500
 
 
-
-
 # def add_violation():
 #     pass
 #
@@ -516,53 +538,57 @@ def get_employee_violations(employee_id):
             ).select_from(Violation) \
                 .join(ProductivityRule, Violation.rule_id == ProductivityRule.id) \
                 .join(SectionRule, (Violation.rule_id == SectionRule.rule_id)) \
-                .join(EmployeeSection, (Violation.employee_id == EmployeeSection.employee_id) & (SectionRule.section_id == EmployeeSection.section_id)) \
+                .join(EmployeeSection, (Violation.employee_id == EmployeeSection.employee_id) & (
+                    SectionRule.section_id == EmployeeSection.section_id)) \
                 .join(Section, EmployeeSection.section_id == Section.id) \
                 .outerjoin(ViolationImages, Violation.id == ViolationImages.violation_id) \
                 .filter(Violation.employee_id == employee_id) \
                 .all()
+            if not violations:
+                return jsonify({"message": "Violation not found"}), 404
 
             serialized_violations = {}
             for violation in violations:
-                print(f'violation  name {violation.rule_name}')
-                if violation.violation_id not in serialized_violations:
+                # if violation.violation_id not in serialized_violations:
 
-                    start_time = datetime.strptime(str(violation.start_time), "%H:%M:%S")
-                    end_time = datetime.strptime(str(violation.end_time), "%H:%M:%S") if violation.end_time else None
-                    allowed_time = datetime.strptime(str(violation.allowed_time), "%H:%M:%S")
-                    duration = end_time - start_time
-                    allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
-                                                 seconds=allowed_time.second)
-                    # condition to check duration and allowed time
-                    if duration > allowed_duration:
-                        print(f' {violation.rule_name} duration -->> {duration} and allowed_duration -->> {allowed_duration}')
-                        serialized_violations[violation.violation_id] = {
-                            "violation_id": violation.violation_id,
-                            "date": violation.date.strftime("%d-%m-%Y"),
-                            "start_time": violation.start_time.strftime("%H:%M"),
-                            "end_time": violation.end_time.strftime("%H:%M") if violation.end_time else None,
-                            "rule_name": violation.rule_name,
-                            "allowed_time": violation.allowed_time.strftime("%H:%M:%S"),  # Ensure allowed_time is formatted correctly
-                            "fine": violation.fine,
-                            "section_id": violation.section_id,
-                            "section_name": violation.section_name,
-                            "images": []
-                        }
-                        if violation.image_url:
-                            serialized_violations[violation.violation_id]["images"].append({
-                                "image_url": violation.image_url,
-                                "capture_time": violation.capture_time.strftime("%H:%M:%S") if violation.capture_time else None
-                            })
+                start_time = datetime.strptime(str(violation.start_time), "%H:%M:%S")
+                end_time = datetime.strptime(str(violation.end_time), "%H:%M:%S") if violation.end_time else None
+                allowed_time = datetime.strptime(str(violation.allowed_time), "%H:%M:%S")
+                duration = end_time - start_time
+                allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
+                                             seconds=allowed_time.second)
+                # condition to check duration and allowed time
+                if duration > allowed_duration:
+                    fine = ((duration - allowed_duration).total_seconds()) * (
+                            violation.fine / allowed_duration.total_seconds())
+                    serialized_violations[violation.violation_id] = {
+                        "violation_id": violation.violation_id,
+                        "date": violation.date.strftime("%d-%m-%Y"),
+                        "start_time": violation.start_time.strftime("%H:%M:%S"),
+                        "end_time": violation.end_time.strftime("%H:%M:%S") if violation.end_time else None,
+                        "rule_name": violation.rule_name,
+                        "allowed_time": violation.allowed_time.strftime("%H:%M:%S"),
+                        # Ensure allowed_time is formatted correctly
+                        "fine": fine,
+                        "section_id": violation.section_id,
+                        "section_name": violation.section_name,
+                        "images": []
+                    }
+                    # if violation.image_url:
+                    serialized_violations[violation.violation_id]["images"].append({
+                        "image_url": violation.image_url,
+                        "capture_time": violation.capture_time.strftime("%H:%M:%S") if violation.capture_time else None
+                    })
 
-                        return jsonify(list(serialized_violations.values())), 200
-                    else:
-                        return jsonify({'message':'No Violation Found'}),200
+            return jsonify(list(serialized_violations.values())), 200
+
 
 
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
-def get_violation_images(violation_id,employee_id):
+
+def get_violation_images(violation_id, employee_id):
     with DBHandler.return_session() as session:
         try:
             violation_images = session.query(ViolationImages.image_url) \
@@ -577,36 +603,6 @@ def get_violation_images(violation_id,employee_id):
         except Exception as e:
             return []
 
-
-# def get_violation_details(violation_id):
-#     with DBHandler.return_session() as session:
-#         try:
-#             violation = session.query(
-#                 Violation.id.label('violation_id'),
-#                 Violation.date,
-#                 Violation.start_time.label('time'),
-#                 ProductivityRule.name.label('rule_name'),
-#                 Section.name.label('section_name')
-#             ).select_from(Violation) \
-#                 .join(ProductivityRule, Violation.rule_id == ProductivityRule.id) \
-#                 .join(EmployeeSection, Violation.employee_id == EmployeeSection.employee_id) \
-#                 .join(Section, EmployeeSection.section_id == Section.id) \
-#                 .filter(Violation.id == violation_id) \
-#                 .first()
-#             if violation is None:
-#                 return jsonify({"message": "Violation not found"}), 404
-#             images = get_violation_images(violation_id)
-#             serialized_violation = {
-#                 "violation_id": violation.violation_id,
-#                 "date": violation.date,
-#                 "time": str(violation.time),
-#                 "rule_name": violation.rule_name,
-#                 "section_name": violation.section_name,
-#                 "images": images
-#             }
-#             return jsonify(serialized_violation), 200
-#         except Exception as e:
-#             return jsonify({'message': str(e)}), 500
 
 def get_violation_details(violation_id):
     with DBHandler.return_session() as session:
@@ -626,7 +622,8 @@ def get_violation_details(violation_id):
             ).select_from(Violation) \
                 .join(ProductivityRule, Violation.rule_id == ProductivityRule.id) \
                 .join(SectionRule, Violation.rule_id == SectionRule.rule_id) \
-                .join(EmployeeSection, (Violation.employee_id == EmployeeSection.employee_id) & (SectionRule.section_id == EmployeeSection.section_id)) \
+                .join(EmployeeSection, (Violation.employee_id == EmployeeSection.employee_id) & (
+                    SectionRule.section_id == EmployeeSection.section_id)) \
                 .join(Section, EmployeeSection.section_id == Section.id) \
                 .outerjoin(ViolationImages, Violation.id == ViolationImages.violation_id) \
                 .filter(Violation.id == violation_id) \
@@ -638,7 +635,7 @@ def get_violation_details(violation_id):
             images = [
                 {
                     "image_url": violation.image_url,
-                    "capture_time": violation.capture_time
+                    "capture_time": violation.capture_time.strftime("%H:%M:%S")
                 } for violation in violations if violation.image_url
             ]
 
@@ -647,10 +644,10 @@ def get_violation_details(violation_id):
                 "employee_id": violation.employee_id,
                 "violation_id": violation.violation_id,
                 "date": violation.date,
-                "start_time": str(violation.start_time),
-                "end_time": str(violation.end_time),
+                "start_time": violation.start_time.strftime("%H:%M"),
+                "end_time": violation.end_time.strftime("%H:%M"),
                 "rule_name": violation.rule_name,
-                "allowed_time": violation.allowed_time,
+                "allowed_time": violation.allowed_time.strftime("%H:%M:%S"),
                 "section_id": violation.section_id,
                 "section_name": violation.section_name,
                 "images": images
@@ -659,31 +656,42 @@ def get_violation_details(violation_id):
 
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
+
 def get_employee_summary(employee_id, date):
     with DBHandler.return_session() as session:
         try:
             # Parse the month and year from the date string
             month, year = map(int, date.split(','))
+            cal = calendar.monthcalendar(month, year)
 
             total_fine = 0
             violation_count = 0
 
             # Fetch the total fine and violation count
-            result = session.query(
-                func.sum(SectionRule.fine),
-                func.count(Violation.id)
-            ) \
-                .join(EmployeeSection, EmployeeSection.section_id == SectionRule.section_id) \
-                .join(Violation, (Violation.rule_id == SectionRule.rule_id) & (
-                    Violation.employee_id == EmployeeSection.employee_id)) \
-                .filter(Violation.employee_id == employee_id) \
+            result = session.query(Violation.start_time, Violation.end_time, Violation.date, SectionRule.allowed_time,
+                                   SectionRule.fine) \
+                .join(Employee, Violation.employee_id == Employee.id) \
+                .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                .join(Section, EmployeeSection.section_id == Section.id) \
+                .join(SectionRule, (Section.id == SectionRule.section_id) & (Violation.rule_id == SectionRule.rule_id)) \
+                .filter(EmployeeSection.employee_id == employee_id) \
                 .filter(extract('year', Violation.date) == year) \
                 .filter(extract('month', Violation.date) == month) \
-                .first()
-
+                .all()
             if result:
-                total_fine = result[0] if result[0] is not None else 0
-                violation_count = result[1]
+                for row in result:
+                    start_time = datetime.strptime(str(row.start_time), "%H:%M:%S")
+                    end_time = datetime.strptime(str(row.end_time), "%H:%M:%S") if row.end_time else None
+                    allowed_time = datetime.strptime(str(row.allowed_time), "%H:%M:%S")
+                    duration = end_time - start_time
+                    allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
+                                                 seconds=allowed_time.second)
+                    # condition to check duration and allowed time
+                    if duration > allowed_duration:
+                        fine = ((duration - allowed_duration).total_seconds()) * (
+                                row.fine / allowed_duration.total_seconds())
+                        total_fine = total_fine + fine
 
             # Fetch attendance records
             attendance = session.query(Attendance).filter(
@@ -705,7 +713,12 @@ def get_employee_summary(employee_id, date):
                 # Initialize counters
                 total_days = 0
                 present_days = 0
-
+                days_without_weekend = 0
+                for week in cal:
+                    # Filter out Saturday (5) and Sunday (6)
+                    for day_index in range(0, 5):  # Monday to Friday
+                        if week[day_index] != 0:
+                            days_without_weekend = days_without_weekend + 1
                 # Iterate through each day of the month
                 for day in range(1, num_days + 1):
                     attendance_date = datetime(year, month, day).strftime("%Y-%m-%d")
@@ -718,12 +731,12 @@ def get_employee_summary(employee_id, date):
                         if attendance_date in attendance_dict:
                             present_days += 1
 
-                attendance_rate = f"{present_days}/{num_days}"
+                attendance_rate = f"{present_days}/{days_without_weekend}"
 
             # Serialize the summary
             serialize_summary = {
                 "total_fine": total_fine,
-                "violation_count": violation_count,
+                "violation_count": len(result),
                 "attendance_rate": attendance_rate
             }
 
@@ -777,5 +790,3 @@ def update_employee_profile(data):
                 return jsonify({'message': 'An Error Occured'}), 404
         except Exception as e:
             return jsonify({'message': str(e)}), 500
-
-

@@ -6,7 +6,7 @@ import zipfile
 
 from flask import jsonify, send_file
 from sqlalchemy import select, func, join, outerjoin
-
+import numpy as np
 import DBHandler
 import Util
 from Models.Batch import Batch
@@ -16,6 +16,10 @@ from Models.ProductLink import ProductLink
 from Models.RawMaterial import RawMaterial
 from Models.Stock import Stock
 from Models.StockInBatch import StockInBatch
+import cv2
+from ultralytics import YOLO
+import threading
+from tqdm import tqdm
 
 
 def add_raw_material(name):
@@ -370,7 +374,106 @@ def get_defected_images(folder_path):
         return jsonify({'message': str(e)}), 500
 
 
-def calculate_yield():
-    # Todo
-    #  Calculate and Update Batch Yield and Increment Defected Pieces
-    pass
+def calculate_yield(batchnumber, total_products, defected_products):
+    with DBHandler.return_session() as session:
+        try:
+            batch = session.query(Batch).filter(Batch.batch_number == batchnumber).first()
+            batch.batch_yield = ((total_products-defected_products) / total_products) * 100
+            batch.defected_pieces = defected_products
+            session.commit()
+        except Exception as e:
+            print(f'Error Occured: {str(e)}')
+
+
+class_names = {0: 'casting', 1: 'milling', 2: 'ok', 3: 'tooling'}
+
+
+def predict_with_model(img, class_counts):
+    model = YOLO(f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\\trained_models\disk_model.pt')
+    model_lock = threading.Lock()
+    unique_classes = set()
+    with model_lock:
+        results = model.predict(img, save=False, imgsz=640, show_boxes=True, show_labels=True, show=False)
+
+        for result in results:
+            boxes = result.boxes
+            for box in boxes:
+                class_id = int(box.cls)
+                unique_classes.add(class_id)
+            img_with_boxes = result.plot()
+
+    # Update class_counts only once per class per image
+    for class_id in unique_classes:
+        if class_id in class_counts:
+            class_counts[class_id] += 1
+        else:
+            class_counts[class_id] = 1
+
+    return img_with_boxes, unique_classes
+
+
+def process_image(image_file, total_discs_list, class_counts, defected_items_list, index, folder_path):
+    print(f"Thread {index} started")
+    total_discs = 0
+
+    img_stream = image_file.read()
+    nparr = np.frombuffer(img_stream, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    frame_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    img_with_boxes, unique_classes = predict_with_model(frame_rgb, class_counts)
+
+    if any(class_id != 2 for class_id in unique_classes):
+        total_discs += 1
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+        save_path = os.path.join(folder_path, f'processed_{timestamp}.jpg')
+        cv2.imwrite(save_path, cv2.cvtColor(img_with_boxes, cv2.COLOR_RGB2BGR))
+
+    total_discs_list[index] = total_discs
+
+    if any(class_id != 2 for class_id in unique_classes):
+        defected_items_list[index] = 1
+
+
+def defect_monitoring(images, product_number, batch_number):
+    try:
+        total_discs_list = [0] * len(images)
+        defected_items_list = [0] * len(images)
+        class_counts = {}
+        threads = []
+
+        path = f'defected_items/{product_number}/{batch_number}'
+
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        for i, image in enumerate(images):
+            thread = threading.Thread(target=process_image,
+                                      args=(image, total_discs_list, class_counts, defected_items_list, i, path))
+            threads.append(thread)
+            thread.start()
+
+        for thread in tqdm(threads, desc="Processing images"):
+            thread.join()
+
+        total_discs = len(total_discs_list)
+        total_defected_items = sum(defected_items_list)
+        print('Total Discs:', total_discs)
+        print('Total Defected Items:', total_defected_items)
+        classes = []
+        for class_id, count in class_counts.items():
+            if class_id != 2:
+                class_name = class_names.get(class_id, f'Class {class_id}')
+                classes.append({class_name: count})
+                print(f'{class_name}: {count}')
+
+        response = {
+            'total_discs': total_discs,
+            'total_defected_items': total_defected_items,
+            'defects': classes
+        }
+        calculate_yield(batch_number, total_discs, total_defected_items)
+        return jsonify(response), 200
+    except Exception as e:
+        return jsonify({'message': e})

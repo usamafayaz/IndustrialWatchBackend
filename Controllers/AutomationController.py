@@ -1,15 +1,20 @@
 import os
+import queue
 import threading
 import time
 from datetime import datetime, timedelta
+import calendar
 
 import cv2 as cv
 from flask import jsonify
+from sqlalchemy import func,extract
 from ultralytics import YOLO
 
 import DBHandler
 import Util
 from Models.Attendance import Attendance
+from Models.Employee import Employee
+from Models.EmployeeProductivity import EmployeeProductivity
 from Models.EmployeeSection import EmployeeSection
 from Models.ProductivityRule import ProductivityRule
 from Models.Section import Section
@@ -24,6 +29,8 @@ timeIntervals = {
     "end_time": None
 }
 
+result_queue = queue.Queue()
+
 
 def detect_employee_violation(file_path):
     employee = is_industry_employee(file_path)
@@ -33,23 +40,23 @@ def detect_employee_violation(file_path):
         threads = []
         for rule in employee['section_rules']:
             if rule['rule_id'] == 1:
-                print('Mobile detection Chalao')
+                print('Start Mobile detection')
                 t = threading.Thread(target=apply_detection_model, args=(
                     file_path,
                     f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\\trained_models\mobile_detection.pt',
-                    employee['employee_id'], 67, 1, rule['allowed_time']))
+                    employee['employee_id'], 67, 1, rule['allowed_time'], result_queue))
                 threads.append(t)
             elif rule['rule_id'] == 2:
-                print('Smoke detection Chalao')
+                print('Start Smoke detection')
                 t = threading.Thread(target=apply_detection_model, args=(
                     file_path,
                     f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\\trained_models\cigarette_model.pt',
-                    employee['employee_id'], 0, 2, rule['allowed_time']))
+                    employee['employee_id'], 0, 2, rule['allowed_time'], result_queue))
                 threads.append(t)
             elif rule['rule_id'] == 3:
-                print('Sitting detection Chalao')
+                print('Start Sitting detection')
                 t = threading.Thread(target=sitting_detection,
-                                     args=(file_path, employee['employee_id'], 3, rule['allowed_time']))
+                                     args=(file_path, employee['employee_id'], 3, rule['allowed_time'], result_queue))
                 threads.append(t)
 
         # Start all threads
@@ -59,7 +66,23 @@ def detect_employee_violation(file_path):
         # Wait for all threads to complete
         for t in threads:
             t.join()
-        return jsonify({'message': 'Employee Found'}), 200
+        results = []
+        while not result_queue.empty():
+            results.append(result_queue.get())
+
+        # Process the results
+        serialized_result = []
+        for rule_id, result in results:
+
+            if rule_id == 1:
+                rule_name = 'Mobile Usage'
+            elif rule_id == 2:
+                rule_name = 'Smoking'
+            else:
+                rule_name = 'Sitting'
+            serialized_result.append({'rule_name':rule_name,'total_time':result})
+        calculate_productivity(employee['employee_id'])
+        return jsonify(serialized_result), 200
 
 
 def predict_with_model(img, model):
@@ -74,7 +97,7 @@ def predict_with_model(img, model):
     return img_with_boxes, class_id
 
 
-def apply_detection_model(video_path, model_path, employee_id, detection_class_id, rule_id, allowed_time):
+def apply_detection_model(video_path, model_path, employee_id, detection_class_id, rule_id, allowed_time, result_queue):
     model = YOLO(model_path)
     handle = cv.VideoCapture(video_path)
     violation_image_path = f'ViolationImages/{employee_id}'
@@ -161,11 +184,75 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
                     add_violation_images(violation_image_path, violationsCaptureWithImage, new_violation.id,
                                          employee_id,
                                          rule_id)
-
             except Exception as e:
                 print(f'Exception occurred, {str(e)}')
+    result = total_time  # whatever your function returns
+    result_queue.put((rule_id, result))
 
+def calculate_productivity(employee_id):
+    try:
+        with DBHandler.return_session() as session:
+            now = datetime.now()
+            current_year = now.year
+            current_month = now.month
+            cal = calendar.monthcalendar(current_year, current_month)
+            _, num_days = calendar.monthrange(current_year, current_month)
 
+            total_fine = 0
+            max_fine = 0
+            days_without_weekend = 0
+            for week in cal:
+                # Filter out Saturday (5) and Sunday (6)
+                for day_index in range(0, 5):  # Monday to Friday
+                    if week[day_index] != 0:
+                        days_without_weekend = days_without_weekend + 1
+            total_working_days = session.query(func.count(Attendance.id)).filter(
+                func.year(Attendance.attendance_date) == current_year,
+                func.month(Attendance.attendance_date) == current_month,
+                Attendance.employee_id == employee_id
+            ).scalar()
+            # Fetch the total fine and violation count
+            result = session.query(Violation.start_time, Violation.end_time, Violation.date, SectionRule.allowed_time,
+                                   SectionRule.fine) \
+                .join(Employee, Violation.employee_id == Employee.id) \
+                .join(EmployeeSection, Employee.id == EmployeeSection.employee_id) \
+                .join(Section, EmployeeSection.section_id == Section.id) \
+                .join(SectionRule, (Section.id == SectionRule.section_id) & (Violation.rule_id == SectionRule.rule_id)) \
+                .filter(EmployeeSection.employee_id == employee_id) \
+                .filter(extract('year', Violation.date) == current_year) \
+                .filter(extract('month', Violation.date) == current_month) \
+                .all()
+            print(f'result-->> {result}')
+            if result:
+                for row in result:
+                    start_time = datetime.strptime(str(row.start_time), "%H:%M:%S")
+                    end_time = datetime.strptime(str(row.end_time), "%H:%M:%S") if row.end_time else None
+                    allowed_time = datetime.strptime(str(row.allowed_time), "%H:%M:%S")
+                    duration = end_time - start_time
+                    allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
+                                                 seconds=allowed_time.second)
+
+                    temp = ((days_without_weekend * 8) - round(
+                        ((allowed_duration.total_seconds() / 3600) * days_without_weekend), 4)) * row.fine
+                    max_fine = max_fine + temp
+                    print(f'max fine -->> {max_fine} and temp fine -->>{temp}')
+                    # condition to check duration and allowed time
+                    if duration > allowed_duration:
+                        fine = ((duration - allowed_duration).total_seconds()) * (
+                                row.fine / allowed_duration.total_seconds())
+                        total_fine = total_fine + fine
+                print(f' {days_without_weekend}attendance -->> {(total_working_days / days_without_weekend) * 100}')
+                print(f'halwa -->> {total_fine / total_working_days}')
+                total_attendance = f"{total_working_days}/{num_days}"
+                calculated_productivity = (((total_fine / max_fine) * 100) + ((total_working_days / num_days) * 100) / 2)
+                productivity_from_db = session.query(EmployeeProductivity).filter(EmployeeProductivity.employee_id == employee_id) \
+                    .filter(extract('month', EmployeeProductivity.productivity_month) == current_month) \
+                    .first()
+                # if not productivity_from_db and  productivity_from_db.productivity!=0 :
+                productivity_from_db.productivity = productivity_from_db.productivity - round(calculated_productivity, 3)
+                session.commit()
+    except Exception as e:
+        return None
 def get_violation(employee_id, rule_id):
     with DBHandler.return_session() as session:
         try:
@@ -180,7 +267,7 @@ def get_violation(employee_id, rule_id):
             return None
 
 
-def sitting_detection(video_path, employee_id, rule_id, allowed_time):
+def sitting_detection(video_path, employee_id, rule_id, allowed_time, result_queue):
     handle = cv.VideoCapture(video_path)
     violation_image_path = f'ViolationImages/{employee_id}'
     if not os.path.exists(violation_image_path):
@@ -258,15 +345,17 @@ def sitting_detection(video_path, employee_id, rule_id, allowed_time):
                 session.add(violation_obj)
 
                 session.commit()
-                new_violation=session.query(Violation).filter(Violation.employee_id==employee_id)\
-                .filter(Violation.rule_id==rule_id)\
-                    .filter(Violation.date==violation_obj.date).first()
+                new_violation = session.query(Violation).filter(Violation.employee_id == employee_id) \
+                    .filter(Violation.rule_id == rule_id) \
+                    .filter(Violation.date == violation_obj.date).first()
                 if new_violation is not None:
                     add_violation_images(violation_image_path, violationsCaptureWithImage, new_violation.id,
                                          employee_id,
                                          rule_id)
             except Exception as e:
                 print(f'Exception occurred, {str(e)}')
+    result = total_time  # whatever your function returns
+    result_queue.put((rule_id, result))
 
 
 def is_industry_employee(file_path):
@@ -390,7 +479,7 @@ def add_violation_images(path, captured_violations, violation_id, employee_id, r
         with DBHandler.return_session() as session:
             for i in captured_violations:
                 time.sleep(1)
-                image_name =Util.get_formatted_number_without_hash()
+                image_name = Util.get_formatted_number_without_hash()
                 # path=f'ViolationImages/{employee_id}/{rule_id}'
                 # if not os.path.exists(path):
                 #     os.makedirs(path)
