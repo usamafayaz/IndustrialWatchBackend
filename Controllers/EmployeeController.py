@@ -462,62 +462,6 @@ def mark_attendance(video_path):  # employee_id
             return jsonify({'message': str(e)}), 500
 
 
-# def add_violation():
-#     pass
-#
-
-# def get_employee_violations(employee_id):
-#     with DBHandler.return_session() as session:
-#         try:
-#             violations = session.query(Violation, ProductivityRule.name.label("rule_name"),SectionRule) \
-#                 .join(ProductivityRule, Violation.rule_id == ProductivityRule.id) \
-#                 .filter(Violation.employee_id == employee_id) \
-#                 .all()
-#             serialized_violations = []
-#             for violation, rule_name in violations:
-#                 images = get_violation_images(violation.id)
-#                 obj = {
-#                     "violation_id": violation.id,
-#                     "date": violation.date.strftime("%d-%m-%Y"),
-#                     "time": violation.start_time.strftime("%H:%M"),
-#                     "rule_name": rule_name,
-#                     "images": images
-#                 }
-#                 serialized_violations.append(obj)
-#             return jsonify(serialized_violations), 200
-#         except Exception as e:
-#             return jsonify({'message': str(e)}), 500
-# def get_employee_violations(employee_id):
-#     with DBHandler.return_session() as session:
-#         try:
-#             violations = session.query(
-#                 Violation,
-#                 ProductivityRule.name.label("rule_name"),
-#                 SectionRule.allowed_time
-#             ) \
-#                 .join(ProductivityRule, Violation.rule_id == ProductivityRule.id) \
-#                 .join(SectionRule,
-#                       and_(Violation.rule_id == SectionRule.rule_id, SectionRule.section_id == Violation.section_id)) \
-#                 .filter(Violation.employee_id == employee_id) \
-#                 .all()
-#
-#             serialized_violations = []
-#             for violation, rule_name, allowed_time in violations:
-#                 images = get_violation_images(violation.id)
-#                 obj = {
-#                     "violation_id": violation.id,
-#                     "date": violation.date.strftime("%d-%m-%Y"),
-#                     "time": violation.start_time.strftime("%H:%M"),
-#                     "rule_name": rule_name,
-#                     "allowed_time": allowed_time.strftime("%H:%M:%S"),  # Ensure allowed_time is formatted correctly
-#                     "images": images
-#                 }
-#                 serialized_violations.append(obj)
-#
-#             return jsonify(serialized_violations), 200
-#         except Exception as e:
-#             return jsonify({'message': str(e)}), 500
-
 
 def get_employee_violations(employee_id):
     with DBHandler.return_session() as session:
@@ -663,10 +607,9 @@ def get_employee_summary(employee_id, date):
         try:
             # Parse the month and year from the date string
             month, year = map(int, date.split(','))
-            cal = calendar.monthcalendar(month, year)
+            cal = calendar.monthcalendar(year,month)
 
             total_fine = 0
-            violation_count = 0
 
             # Fetch the total fine and violation count
             result = session.query(Violation.start_time, Violation.end_time, Violation.date, SectionRule.allowed_time,
@@ -730,7 +673,7 @@ def get_employee_summary(employee_id, date):
                         # If the attendance record exists for the date, mark as present
                         if attendance_date in attendance_dict:
                             present_days += 1
-
+                print(f'days without week end {days_without_weekend}')
                 attendance_rate = f"{present_days}/{days_without_weekend}"
 
             # Serialize the summary
