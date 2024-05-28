@@ -129,8 +129,8 @@ def get_defected_images():
 @app.route('/api/Production/DefectMonitoring', methods=['POST'])
 def process_images():
     images = request.files.getlist('images')
-    product_number = request.args.get('product_number')
-    batch_number = request.args.get('batch_number')
+    product_number = request.form.get('product_number')
+    batch_number = request.form.get('batch_number')
     response = ProductionController.defect_monitoring(images, product_number, batch_number)
     return response
 
@@ -332,6 +332,8 @@ def predict_employee_violation():
     if response is None:
         return jsonify({'message': 'Unable to Save Frame'}), 500
     return response
+
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=False)
