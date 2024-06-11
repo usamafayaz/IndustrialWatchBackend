@@ -253,19 +253,19 @@ def get_employee_attendance():
     return response
 
 
-@app.route('/api/Employee/MarkAttendance', methods=['POST'])
+@app.route('/api/Employee/MarkAttendance', methods=['GET'])
 def mark_attendance():
-   # employee_id = request.args.get('employee_id')
-    if 'files' not in request.files:
-        return jsonify({'message': 'No files part'}), 400
-    files = request.files.get('files')
-    if not files:
-        return jsonify({'message': 'No files selected'}), 400
-
-    video_path = os.path.join('temp_videos', 'attendance.mp4')
-    files.save(video_path)
-    response = EmployeeController.mark_attendance(video_path)
-    os.remove(video_path)
+    employee_id = request.args.get('employee_id')
+   #  if 'files' not in request.files:
+   #      return jsonify({'message': 'No files part'}), 400
+   #  files = request.files.get('files')
+   #  if not files:
+   #      return jsonify({'message': 'No files selected'}), 400
+   #
+   #  video_path = os.path.join('temp_videos', 'attendance.mp4')
+   #  files.save(video_path)
+    response = EmployeeController.mark_attendance(employee_id) #video_path
+    # os.remove(video_path)
     return response
 
 

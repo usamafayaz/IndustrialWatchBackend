@@ -1,13 +1,13 @@
+import calendar
 import os
 import queue
 import threading
 import time
 from datetime import datetime, timedelta
-import calendar
 
 import cv2 as cv
 from flask import jsonify
-from sqlalchemy import func,extract
+from sqlalchemy import func, extract
 from ultralytics import YOLO
 
 import DBHandler
@@ -39,19 +39,19 @@ def detect_employee_violation(file_path):
     else:
         threads = []
         for rule in employee['section_rules']:
-            if rule['rule_id'] == 1:
+            if rule['rule_id'] == 2:
                 print('Start Mobile detection')
                 t = threading.Thread(target=apply_detection_model, args=(
                     file_path,
-                    f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\\trained_models\mobile_detection.pt',
-                    employee['employee_id'], 67, 1, rule['allowed_time'], result_queue))
+                    f'trained_models/mobile_detection.pt',
+                    employee['employee_id'], 67, 2, result_queue, False))
                 threads.append(t)
-            elif rule['rule_id'] == 2:
+            elif rule['rule_id'] == 1:
                 print('Start Smoke detection')
                 t = threading.Thread(target=apply_detection_model, args=(
                     file_path,
-                    f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\\trained_models\cigarette_model.pt',
-                    employee['employee_id'], 0, 2, rule['allowed_time'], result_queue))
+                    'trained_models/cigarette_detection.pt',
+                    employee['employee_id'], 0, 1, result_queue, 0.5))
                 threads.append(t)
             elif rule['rule_id'] == 3:
                 print('Start Sitting detection')
@@ -74,32 +74,42 @@ def detect_employee_violation(file_path):
         serialized_result = []
         for rule_id, result in results:
 
-            if rule_id == 1:
+            if rule_id == 2:
                 rule_name = 'Mobile Usage'
-            elif rule_id == 2:
+            elif rule_id == 1:
                 rule_name = 'Smoking'
             else:
                 rule_name = 'Sitting'
-            serialized_result.append({'rule_name':rule_name,'total_time':result})
+            serialized_result.append({'rule_name': rule_name, 'total_time': result})
         calculate_productivity(employee['employee_id'])
         return jsonify(serialized_result), 200
 
 
-def predict_with_model(img, model):
-    results = model.predict(img, classes=[0, 67], save=True, imgsz=640, show_boxes=True, show_labels=True, show=True)
+def predict_with_model(img, model, confidence):
+    if confidence:
+        results = model.predict(img, classes=[0, 67], save=True, imgsz=640, show_boxes=True, show_labels=True,
+                                show=True, conf=confidence)
+    else:
+        results = model.predict(img, classes=[0, 67], save=True, imgsz=640, show_boxes=True, show_labels=True,
+                                show=True)
+
     class_id = None
     for result in results:
         boxes = result.boxes
         print(boxes)
         for box in boxes:
             class_id = int(box.cls)
+            conf = float(box.conf.item())  # Convert tensor to float
+            print('id:', class_id, 'conf:', conf)
         img_with_boxes = result.plot()
     return img_with_boxes, class_id
 
 
-def apply_detection_model(video_path, model_path, employee_id, detection_class_id, rule_id, allowed_time, result_queue):
-    model = YOLO(model_path)
+def apply_detection_model(video_path, model_path, employee_id, detection_class_id, rule_id, result_queue, confidence):
     handle = cv.VideoCapture(video_path)
+    model_path = os.path.abspath(model_path)
+    model = YOLO(model_path)
+
     violation_image_path = f'ViolationImages/{employee_id}'
     if not os.path.exists(violation_image_path):
         os.makedirs(violation_image_path)
@@ -120,7 +130,7 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
             break
 
         if violation_occurence != 3:
-            img_with_boxes, class_id = predict_with_model(frame, model)
+            img_with_boxes, class_id = predict_with_model(frame, model, confidence)
             print(f"Predicting Frame Number: {i}")
 
             if class_id != None:
@@ -189,6 +199,7 @@ def apply_detection_model(video_path, model_path, employee_id, detection_class_i
     result = total_time  # whatever your function returns
     result_queue.put((rule_id, result))
 
+
 def calculate_productivity(employee_id):
     try:
         with DBHandler.return_session() as session:
@@ -244,15 +255,21 @@ def calculate_productivity(employee_id):
                 print(f' {days_without_weekend}attendance -->> {(total_working_days / days_without_weekend) * 100}')
                 print(f'halwa -->> {total_fine / total_working_days}')
                 total_attendance = f"{total_working_days}/{num_days}"
-                calculated_productivity = (((total_fine / max_fine) * 100) + ((total_working_days / num_days) * 100) / 2)
-                productivity_from_db = session.query(EmployeeProductivity).filter(EmployeeProductivity.employee_id == employee_id) \
+                calculated_productivity = (
+                            ((total_fine / max_fine) * 100) + ((total_working_days / num_days) * 100) / 2)
+                print(f'calculated productivity-->>', calculated_productivity)
+                productivity_from_db = session.query(EmployeeProductivity).filter(
+                    EmployeeProductivity.employee_id == employee_id) \
                     .filter(extract('month', EmployeeProductivity.productivity_month) == current_month) \
                     .first()
                 # if not productivity_from_db and  productivity_from_db.productivity!=0 :
-                productivity_from_db.productivity = productivity_from_db.productivity - round(calculated_productivity, 3)
+                productivity_from_db.productivity = productivity_from_db.productivity - round(calculated_productivity,
+                                                                                              3)
                 session.commit()
     except Exception as e:
         return None
+
+
 def get_violation(employee_id, rule_id):
     with DBHandler.return_session() as session:
         try:
@@ -363,11 +380,11 @@ def is_industry_employee(file_path):
     if image is not None:
         facerecoganizer = FaceRecognition()
         person = facerecoganizer.predict(image)
-        print("dsadsad", person)
+        print("Person ID", person)
         if person is not None and person != 'No face detected':
-            print(f'Prediction = {person[0]}')
+            print(f'Employee ID of Detected Person = {person[0]}')
             section_id = get_employee_section_id(int(person[0]))
-            print(f'Prediction = {section_id}')
+            print(f'Section ID of Detected Person = {section_id}')
             section_detail = get_section_detail(section_id)
             employee = {
                 'employee_id': int(person[0]),
@@ -414,7 +431,7 @@ def get_section_detail(id):
             section = session.query(Section).filter(Section.id == id).first()
             if section == None:
                 print(jsonify({'message': 'Section not found'}), 500)
-            print(f'Section a gya Sai')
+            print(f'Employee Section Detected.')
             query = session.query(Section, SectionRule, ProductivityRule).join(SectionRule,
                                                                                Section.id == SectionRule.section_id).join(
                 ProductivityRule, SectionRule.rule_id == ProductivityRule.id).filter(Section.id == id)
@@ -451,13 +468,13 @@ def mark_attendance(video_path):
         with DBHandler.return_session() as session:
             employee = is_industry_employee(video_path)
             if employee is None:
-                print(f'employee none hai')
+                print(f'Unrecognized Face')
 
                 return jsonify({'message': 'Employee Not Found'}), 404
             else:
                 attendance = session.query(Attendance).filter(Attendance.employee_id == employee['employee_id']).first()
                 if attendance is not None:
-                    print(f'attendance --->> {attendance.attendance_date}')
+                    print(f'Attendance --->> {attendance.attendance_date}')
                     attendance.check_out = datetime.now().strftime('%H:%M:%S')
                     session.commit()
                     return False

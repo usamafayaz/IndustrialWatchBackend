@@ -389,7 +389,8 @@ class_names = {0: 'casting', 1: 'milling', 2: 'ok', 3: 'tooling'}
 
 
 def predict_with_model(img, class_counts):
-    model = YOLO(f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\\trained_models\disk_model.pt')
+    model_path = os.path.abspath(f'trained_models/disk_model.pt')
+    model = YOLO(model_path)
     model_lock = threading.Lock()
     unique_classes = set()
     with model_lock:
@@ -438,7 +439,7 @@ def process_image(image_file, total_discs_list, class_counts, defected_items_lis
 
 def defect_monitoring(images, product_number, batch_number):
     try:
-        total_discs_list = [0] * len(images)
+        total_items = [0] * len(images)
         defected_items_list = [0] * len(images)
         class_counts = {}
         threads = []
@@ -450,16 +451,16 @@ def defect_monitoring(images, product_number, batch_number):
 
         for i, image in enumerate(images):
             thread = threading.Thread(target=process_image,
-                                      args=(image, total_discs_list, class_counts, defected_items_list, i, path))
+                                      args=(image, total_items, class_counts, defected_items_list, i, path))
             threads.append(thread)
             thread.start()
 
         for thread in tqdm(threads, desc="Processing images"):
             thread.join()
 
-        total_discs = len(total_discs_list)
+        total_discs = len(total_items)
         total_defected_items = sum(defected_items_list)
-        print('Total Discs:', total_discs)
+        print('Total Items:', total_discs)
         print('Total Defected Items:', total_defected_items)
         classes = []
         for class_id, count in class_counts.items():

@@ -2,7 +2,7 @@ import cv2
 import mediapipe as mp
 
 
-def is_sitting(results):
+def is_sitting(results, height):
     # Criteria for sitting posture
     # Check if hips are slightly above or at the level of knees
     left_hip_y = results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.LEFT_HIP].y
@@ -12,9 +12,12 @@ def is_sitting(results):
 
     hip_height = (left_hip_y + right_hip_y) / 2
     knee_height = (left_knee_y + right_knee_y) / 2
+    # Calculate the margin based on the height of the person
+    margin = height * 0.08  # Adjust the multiplier as needed
 
-    # Allow a small margin for the knees to be slightly lower than the hips
-    return knee_height < hip_height + 0.1
+    # Check if the knees are slightly lower than the hips
+    return knee_height < hip_height + margin
+
 
 
 def sitting_detection_(frame):
@@ -38,10 +41,23 @@ def sitting_detection_(frame):
 
     # Determine if the person is sitting or not
     if results.pose_landmarks:
-        if is_sitting(results):
+        height = calculate_height(results)
+        if is_sitting(results, height):
             print('Sitting')
             return True
         else:
             print('Standing')
             return False
 
+def calculate_height(results):
+    # Calculate the height of the person
+    left_shoulder_y = results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER].y
+    right_shoulder_y = results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER].y
+    shoulder_height = (left_shoulder_y + right_shoulder_y) / 2
+
+    left_heel_y = results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.LEFT_HEEL].y
+    right_heel_y = results.pose_landmarks.landmark[mp.solutions.pose.PoseLandmark.RIGHT_HEEL].y
+    heel_height = (left_heel_y + right_heel_y) / 2
+
+    height = 1 - (shoulder_height - heel_height)
+    return height

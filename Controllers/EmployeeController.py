@@ -65,7 +65,7 @@ def add_employee(data):
                                 gender=data.get('gender'), user_id=user.id)
             session.add(employee)
             session.commit()
-            productivity = EmployeeProductivity(employee_id=employee.id, productivity=0,
+            productivity = EmployeeProductivity(employee_id=employee.id, productivity=100,
                                                 productivity_month=datetime.today().strftime('%Y-%m-%d'))
             session.add(productivity)
             session.commit()
@@ -74,6 +74,7 @@ def add_employee(data):
                 delete_user_and_employee(user, employee)
                 return jsonify({'message': 'Error in adding employee,Try again'}), 500
             # employee_id = session.query(Employee.id).filter(Employee.id == user.id).first()
+            mark_attendance(employee.id)
             is_employee_added_to_sec = add_employee_to_section(employee.id, section_id=data.get('section_id'))
             if is_employee_added_to_sec is False:
                 delete_user_and_employee(user, employee)
@@ -88,6 +89,7 @@ def add_employee(data):
 
 def train_model_in_thread():
     try:
+        print("Train Facenet Model")
         training_manager = FacenetTraining()
         training_manager.train_model()
     except Exception as e:
@@ -430,7 +432,7 @@ def get_employee_attendance(employee_id):
             return jsonify({'message': str(e)}), 500
 
 
-def mark_attendance(video_path):  # employee_id
+def mark_attendance(employee_id):  # video_path
     with DBHandler.return_session() as session:
         try:
             today = date.today()
@@ -439,25 +441,26 @@ def mark_attendance(video_path):  # employee_id
             cal = calendar.monthcalendar(current_year, current_month)
             weekday_dates = []
 
-            # # Iterate through each week
-            # for week in cal:
-            #     # Filter out Saturday (5) and Sunday (6)
-            #     for day_index in range(0, 5):  # Monday to Friday
-            #         if week[day_index] != 0:
-            #             # Append the date to the list
-            #             # weekday_dates.append()
-            #             session.add(Attendance(
-            #                 check_in='08:00',
-            #                 check_out='17:00',
-            #                 attendance_date=date(current_year, current_month, week[day_index]),
-            #                 employee_id=employee_id
-            #             ))
-            result = AutomationController.mark_attendance(video_path)
-            print(f'attendance result -->> {result}')
-            if result:
-                return jsonify({'message': 'Attendance Marked'}), 200
-            else:
-                return jsonify({'message': 'Employee Check Out'}), 200
+            # Iterate through each week
+            for week in cal:
+                # Filter out Saturday (5) and Sunday (6)
+                for day_index in range(0, 5):  # Monday to Friday
+                    if week[day_index] != 0:
+                        # Append the date to the list
+                        # weekday_dates.append()
+                        session.add(Attendance(
+                            check_in='08:00',
+                            check_out='17:00',
+                            attendance_date=date(current_year, current_month, week[day_index]),
+                            employee_id=employee_id
+                        ))
+            session.commit()
+            # result = AutomationController.mark_attendance(video_path)
+            # print(f'attendance result -->> {result}')
+            # if result:
+            return jsonify({'message': 'Attendance Marked'}), 200
+            # else:
+            #     return jsonify({'message': 'Employee Check Out'}), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500
 
