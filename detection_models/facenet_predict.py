@@ -1,3 +1,5 @@
+import os.path
+
 import cv2 as cv
 import numpy as np
 from mtcnn.mtcnn import MTCNN
@@ -8,9 +10,10 @@ from sklearn.preprocessing import LabelEncoder
 
 class FaceRecognition:
     def __init__(self):
-        self.model_path = f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\detection_models\svm_model_160x160.pkl'
-        self.encoder_path = f'D:\BSCS\Final Year Project\IndustrialWatchFYPBackend\detection_models\\faces_embeddings_done_classes.npz'
-
+        self.model_path = f'detection_models/svm_model_160x160.pkl'
+        self.encoder_path = f'detection_models/faces_embeddings_done_classes.npz'
+        self.model_path = os.path.abspath(self.model_path)
+        self.encoder_path = os.path.abspath(self.encoder_path)
         # Load the trained SVM model
         with open(self.model_path, 'rb') as f:
             self.model = pickle.load(f)

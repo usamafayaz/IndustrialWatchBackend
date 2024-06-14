@@ -15,8 +15,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 class FacenetTraining:
     def __init__(self):
-        # self.directory = "../EmployeeImages"
-        self.directory = os.path.join(os.pardir, 'EmployeeImages')
+        self.directory = os.path.join('EmployeeImages')
         self.target_size = (160, 160)
         self.detector = MTCNN()
         self.embedder = FaceNet()
@@ -68,11 +67,13 @@ class FacenetTraining:
         return yhat[0]
 
     def train_model(self):
+        print('train ho raha hai ')
+
         X, Y = self.load_classes()
         EMBEDDED_X = [self.get_embedding(img) for img in X]
         EMBEDDED_X = np.asarray(EMBEDDED_X)
 
-        np.savez_compressed('faces_embeddings_done_classes.npz', EMBEDDED_X, Y)
+        np.savez_compressed('detection_models/faces_embeddings_done_classes.npz', EMBEDDED_X, Y)
 
         encoder = LabelEncoder()
         encoder.fit(Y)
@@ -89,7 +90,7 @@ class FacenetTraining:
         print(f"Training Accuracy: {train_accuracy}")
         print(f"Testing Accuracy: {test_accuracy}")
 
-        with open('svm_model_160x160.pkl', 'wb') as f:
+        with open('detection_models/svm_model_160x160.pkl', 'wb') as f:
             pickle.dump(model, f)
 
         return model, encoder
