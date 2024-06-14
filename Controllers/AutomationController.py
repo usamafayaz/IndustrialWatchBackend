@@ -14,6 +14,7 @@ import DBHandler
 import Util
 from Models.Attendance import Attendance
 from Models.Employee import Employee
+from Models.User import User
 from Models.EmployeeProductivity import EmployeeProductivity
 from Models.EmployeeSection import EmployeeSection
 from Models.ProductivityRule import ProductivityRule
@@ -56,7 +57,7 @@ def detect_employee_violation(file_path):
             elif rule['rule_id'] == 3:
                 print('Start Sitting detection')
                 t = threading.Thread(target=sitting_detection,
-                                     args=(file_path, employee['employee_id'], 3, rule['allowed_time'], result_queue))
+                                     args=(file_path, employee['employee_id'] ,3, result_queue))
                 threads.append(t)
 
         # Start all threads
@@ -71,17 +72,18 @@ def detect_employee_violation(file_path):
             results.append(result_queue.get())
 
         # Process the results
-        serialized_result = []
+        serialized_list =  []
         for rule_id, result in results:
-
             if rule_id == 2:
                 rule_name = 'Mobile Usage'
             elif rule_id == 1:
                 rule_name = 'Smoking'
             else:
                 rule_name = 'Sitting'
-            serialized_result.append({'rule_name': rule_name, 'total_time': result})
+            serialized_list.append({'rule_name': rule_name, 'total_time': result})
+            serialized_result = {'employee_name': employee['employee_name'],'rules':serialized_list}
         calculate_productivity(employee['employee_id'])
+        print(f'serialized_result is', serialized_result)
         return jsonify(serialized_result), 200
 
 
@@ -284,7 +286,7 @@ def get_violation(employee_id, rule_id):
             return None
 
 
-def sitting_detection(video_path, employee_id, rule_id, allowed_time, result_queue):
+def sitting_detection(video_path, employee_id, rule_id, result_queue):
     handle = cv.VideoCapture(video_path)
     violation_image_path = f'ViolationImages/{employee_id}'
     if not os.path.exists(violation_image_path):
@@ -386,9 +388,13 @@ def is_industry_employee(file_path):
             section_id = get_employee_section_id(int(person[0]))
             print(f'Section ID of Detected Person = {section_id}')
             section_detail = get_section_detail(section_id)
+            employee_name = get_employee_detail(int(person[0]))
+            print(f'Name of Detected Person = {employee_name[0]}')
+
             employee = {
                 'employee_id': int(person[0]),
-                'section_rules': []
+                'section_rules': [],
+                'employee_name': employee_name[0]
             }
             for rule in section_detail['rules']:
                 obj = {
@@ -453,7 +459,13 @@ def get_section_detail(id):
             print(jsonify({'message': str(e)}), 500)
             return None
 
-
+def get_employee_detail(id):
+    with DBHandler.return_session() as session:
+        try:
+            employee_name = session.query(Employee.name).filter(Employee.id==id).first()
+            return employee_name
+        except Exception as e:
+            return None
 def get_employee_section_id(employee_id):
     with DBHandler.return_session() as session:
         try:

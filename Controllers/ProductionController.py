@@ -387,7 +387,6 @@ def calculate_yield(batchnumber, total_products, defected_products):
 
 class_names = {0: 'casting', 1: 'milling', 2: 'ok', 3: 'tooling'}
 
-
 def predict_with_model(img, class_counts):
     model_path = os.path.abspath(f'trained_models/disk_model.pt')
     model = YOLO(model_path)
@@ -439,12 +438,17 @@ def process_image(image_file, total_discs_list, class_counts, defected_items_lis
 
 def defect_monitoring(images, product_number, batch_number):
     try:
+        with DBHandler.return_session() as session:
+                product = session.query(Product).filter(Product.product_number == product_number).first()
+                product_name= product.name
+        # if 'disc' in product_name:
+        #     Todoo
         total_items = [0] * len(images)
         defected_items_list = [0] * len(images)
         class_counts = {}
         threads = []
 
-        path = f'defected_items/{product_number}/{batch_number}'
+        path = f'defected_items/{product_name}/{product_number}/{batch_number}'
 
         if not os.path.exists(path):
             os.makedirs(path)
