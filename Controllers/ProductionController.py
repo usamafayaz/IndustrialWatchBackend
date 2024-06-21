@@ -1,12 +1,17 @@
 import datetime
 import io
 import os
+import threading
 import time
 import zipfile
 
+import cv2
+import numpy as np
 from flask import jsonify, send_file
 from sqlalchemy import select, func, join, outerjoin
-import numpy as np
+from tqdm import tqdm
+from ultralytics import YOLO
+
 import DBHandler
 import Util
 from Models.Batch import Batch
@@ -16,10 +21,6 @@ from Models.ProductLink import ProductLink
 from Models.RawMaterial import RawMaterial
 from Models.Stock import Stock
 from Models.StockInBatch import StockInBatch
-import cv2
-from ultralytics import YOLO
-import threading
-from tqdm import tqdm
 
 
 def add_raw_material(name):
@@ -378,17 +379,153 @@ def calculate_yield(batchnumber, total_products, defected_products):
     with DBHandler.return_session() as session:
         try:
             batch = session.query(Batch).filter(Batch.batch_number == batchnumber).first()
-            batch.batch_yield = ((total_products-defected_products) / total_products) * 100
+            batch.batch_yield = ((total_products - defected_products) / total_products) * 100
             batch.defected_pieces = defected_products
             session.commit()
         except Exception as e:
             print(f'Error Occured: {str(e)}')
 
 
-class_names = {0: 'casting', 1: 'milling', 2: 'ok', 3: 'tooling'}
+class_names = {}
+class_names_disc = {0: 'casting', 1: 'milling', 2: 'ok', 3: 'tooling'}
+class_names_bottle = {0: 'bottle', 1: 'cap', 2: 'label'}
+class_names_textile = {0: 'hole', 1: 'yarn defect'}
 
-def predict_with_model(img, class_counts):
-    model_path = os.path.abspath(f'trained_models/disk_model.pt')
+bottle_conf_thresholds = {
+    0: 0.5,
+    1: 0.7,
+    2: 0.1
+}
+
+
+def defect_monitoring(images, product_number, batch_number):
+    try:
+        print("Received images list:", images)
+
+        with DBHandler.return_session() as session:
+            product = session.query(Product).filter(Product.product_number == product_number).first()
+            product_name = product.name.lower()
+
+        total_items = [0] * len(images)
+        defected_items_list = [0] * len(images)
+        class_counts = {}
+        threads = []
+
+        # path = f'defected_items/{product_name}/{product_number}/{batch_number}'
+        path = f'defected_items/{product_number}/{batch_number}'
+
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        for i, image in enumerate(images):
+            thread = threading.Thread(target=process_image,
+                                      args=(
+                                          image, total_items, class_counts, defected_items_list, i, path, product_name))
+            threads.append(thread)
+            thread.start()
+
+        for thread in tqdm(threads, desc="Processing images"):
+            thread.join()
+
+        total_items = len(total_items)
+        total_defected_items = sum(defected_items_list)
+        print('Total Items:', total_items)
+        print('Total Defected Items:', total_defected_items)
+        classes = []
+        for class_id, count in class_counts.items():
+            if 'disc' in product_name:
+                class_names = class_names_disc
+                if class_id != 2:
+                    class_name = class_names.get(class_id, f'Class {class_id}')
+                    classes.append({class_name: count})
+                    print(f'{class_name}: {count}')
+            elif 'fabric' in product_name or 'textile' in product_name:
+                class_names = class_names_textile
+                class_name = class_names.get(class_id, f'Class {class_id}')
+                classes.append({class_name: total_items - count})
+                print(f'{class_name}: {total_items - count}')
+            elif 'bottle' in product_name:
+                class_names = class_names_bottle
+                if class_id != 0:
+                    class_name = class_names.get(class_id, f'Class {class_id}')
+                    classes.append({class_name: total_items - count})
+                    print(f'{class_name}: {total_items - count}')
+
+        response = {
+            'total_items': total_items,
+            'total_defected_items': total_defected_items,
+            'defects': classes
+        }
+        calculate_yield(batch_number, total_items, total_defected_items)
+        return jsonify(response), 200
+    except Exception as e:
+        return jsonify({'message': e})
+
+
+def process_image(image_file, total_discs_list, class_counts, defected_items_list, index, folder_path, product_name):
+    print(f"Thread {index} started")
+    total_items = 0
+    print(type(image_file))
+    print(image_file)
+    img_stream = image_file.read()
+    nparr = np.frombuffer(img_stream, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    frame_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    model_path = ''
+    hide_disc_ok = False
+    hide_bottle_ok = False
+
+    if 'disc' in product_name:
+        model_path = 'trained_models/disk_model.pt'
+        class_names = class_names_disc
+        hide_disc_ok = True
+    elif 'fabric' in product_name or 'textile' in product_name:
+        model_path = 'trained_models/textile_defect_detection.pt'
+        class_names = class_names_textile
+    elif 'bottle' in product_name:
+        model_path = 'trained_models/bottle_defect.pt'
+        class_names = class_names_bottle
+        hide_bottle_ok = True
+
+    img_with_boxes, unique_classes = predict_with_model(frame_rgb, class_counts, model_path)
+
+    if hide_disc_ok:
+        if any(class_id != 2 for class_id in unique_classes):
+            total_items += 1
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+            save_path = os.path.join(folder_path, f'processed_{timestamp}.jpg')
+            cv2.imwrite(save_path, cv2.cvtColor(img_with_boxes, cv2.COLOR_RGB2BGR))
+
+        total_discs_list[index] = total_items
+        if any(class_id != 2 for class_id in unique_classes):
+            defected_items_list[index] = 1
+
+    elif hide_bottle_ok:
+        # has_bottle = any(class_id == 0 for class_id in unique_classes)
+        has_cap = any(class_id == 1 for class_id in unique_classes)
+        has_label = any(class_id == 2 for class_id in unique_classes)
+
+        if not has_cap or not has_label:
+            total_items += 1
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+            save_path = os.path.join(folder_path, f'processed_{timestamp}.jpg')
+            cv2.imwrite(save_path, cv2.cvtColor(img_with_boxes, cv2.COLOR_RGB2BGR))
+
+        total_discs_list[index] = total_items
+        if not has_cap or not has_label:
+            defected_items_list[index] = 1
+    else:
+        total_items += 1
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+        save_path = os.path.join(folder_path, f'processed_{timestamp}.jpg')
+        cv2.imwrite(save_path, cv2.cvtColor(img_with_boxes, cv2.COLOR_RGB2BGR))
+        total_discs_list[index] = total_items
+    return defected_items_list
+
+
+def predict_with_model(img, class_counts, model_path):
+    model_path = os.path.abspath(model_path)
     model = YOLO(model_path)
     model_lock = threading.Lock()
     unique_classes = set()
@@ -397,10 +534,22 @@ def predict_with_model(img, class_counts):
 
         for result in results:
             boxes = result.boxes
+            filtered_result = result
+
             for box in boxes:
                 class_id = int(box.cls)
-                unique_classes.add(class_id)
-            img_with_boxes = result.plot()
+                conf = float(box.conf.item())
+                if 'bottle' in model_path:
+                    if conf >= bottle_conf_thresholds.get(class_id, 0):
+                        print("bottle==>>", {conf, class_id, bottle_conf_thresholds.get(class_id, 0)})
+                        unique_classes.add(class_id)
+                        filtered_result = result
+                else:
+                    unique_classes.add(class_id)
+        # if filtered_result is not None:
+        img_with_boxes = filtered_result.plot()
+        # else:
+        #     img_with_boxes = result.plot()
 
     # Update class_counts only once per class per image
     for class_id in unique_classes:
@@ -408,77 +557,48 @@ def predict_with_model(img, class_counts):
             class_counts[class_id] += 1
         else:
             class_counts[class_id] = 1
-
+    print("image_with_boxes==>>", img_with_boxes)
     return img_with_boxes, unique_classes
 
 
-def process_image(image_file, total_discs_list, class_counts, defected_items_list, index, folder_path):
-    print(f"Thread {index} started")
-    total_discs = 0
+def angles_monitoring(front_image, back_image, side_images):
+    model = YOLO('trained_models/disk_model.pt')
+    defect_classes = [0, 1, 3]  # Classes representing defects
+    side_defect_class = 0  # Side cut defect class
 
-    img_stream = image_file.read()
+    overall_status = "ok product"
+    class_count = {}
+    defects_report = {
+        "front": [],
+        "back": [],
+        "sides": []
+    }
+
+    # Predict defects for front image
+    f_image, f_classes = predict_with_model(convert_image_to_ndArrary(front_image), class_count, 'trained_models/disk_model.pt')
+    for class_id in f_classes:
+        if class_id in defect_classes:
+            defects_report["front"].append(class_names_disc.get(class_id))
+            overall_status = "defected product"
+
+    # Predict defects for back image
+    b_image, b_classes = predict_with_model(convert_image_to_ndArrary(back_image), class_count, 'trained_models/disk_model.pt')
+    for class_id in b_classes:
+        if class_id in defect_classes:
+            defects_report["back"].append(class_names_disc.get(class_id))
+            overall_status = "defected product"
+
+    # Predict defects for side images
+    for idx, side_image in enumerate(side_images):
+        s_image, s_classes = predict_with_model(convert_image_to_ndArrary(side_image), class_count, 'trained_models/side_cut_model.pt')
+        for class_id in s_classes:
+            if class_id == side_defect_class:
+                defects_report["sides"].append({"side": idx + 1, "defect": "side_cut"})
+                overall_status = "defected product"
+
+    return jsonify({'status': overall_status, 'defects_report': defects_report}), 200
+def convert_image_to_ndArrary(image):
+    img_stream = image.read()
     nparr = np.frombuffer(img_stream, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-    frame_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-    img_with_boxes, unique_classes = predict_with_model(frame_rgb, class_counts)
-
-    if any(class_id != 2 for class_id in unique_classes):
-        total_discs += 1
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
-        save_path = os.path.join(folder_path, f'processed_{timestamp}.jpg')
-        cv2.imwrite(save_path, cv2.cvtColor(img_with_boxes, cv2.COLOR_RGB2BGR))
-
-    total_discs_list[index] = total_discs
-
-    if any(class_id != 2 for class_id in unique_classes):
-        defected_items_list[index] = 1
-
-
-def defect_monitoring(images, product_number, batch_number):
-    try:
-        with DBHandler.return_session() as session:
-                product = session.query(Product).filter(Product.product_number == product_number).first()
-                product_name= product.name
-        # if 'disc' in product_name:
-        #     Todoo
-        total_items = [0] * len(images)
-        defected_items_list = [0] * len(images)
-        class_counts = {}
-        threads = []
-
-        path = f'defected_items/{product_name}/{product_number}/{batch_number}'
-
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        for i, image in enumerate(images):
-            thread = threading.Thread(target=process_image,
-                                      args=(image, total_items, class_counts, defected_items_list, i, path))
-            threads.append(thread)
-            thread.start()
-
-        for thread in tqdm(threads, desc="Processing images"):
-            thread.join()
-
-        total_discs = len(total_items)
-        total_defected_items = sum(defected_items_list)
-        print('Total Items:', total_discs)
-        print('Total Defected Items:', total_defected_items)
-        classes = []
-        for class_id, count in class_counts.items():
-            if class_id != 2:
-                class_name = class_names.get(class_id, f'Class {class_id}')
-                classes.append({class_name: count})
-                print(f'{class_name}: {count}')
-
-        response = {
-            'total_discs': total_discs,
-            'total_defected_items': total_defected_items,
-            'defects': classes
-        }
-        calculate_yield(batch_number, total_discs, total_defected_items)
-        return jsonify(response), 200
-    except Exception as e:
-        return jsonify({'message': e})
+    return img

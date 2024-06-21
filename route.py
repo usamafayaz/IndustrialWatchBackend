@@ -134,6 +134,19 @@ def process_images():
     response = ProductionController.defect_monitoring(images, product_number, batch_number)
     return response
 
+@app.route('/api/Production/AnglesMonitoring', methods=['POST'])
+def angles_monitoring():
+    # Retrieve the files from the request
+    #images = request.files.get('images')
+    if 'sides' not in request.files or 'front'not in request.files or 'back'not in request.files:
+        return jsonify({'message': 'No files part'}), 500
+    side_images = request.files.getlist('sides')
+    front_image = request.files.get('front')
+    back_image = request.files.get('back')
+    if not side_images or not front_image or not back_image:
+        return jsonify({'message': 'No files selected'}), 500
+    response = ProductionController.angles_monitoring(front_image,back_image,side_images)
+    return response
 
 #%%%%%%%%%%%%%%%%%%%    SectionController   %%%%%%%%%%%%%%%%%%%%%%%
 @app.route('/api/Section/InsertSection', methods=['POST'])
@@ -253,18 +266,14 @@ def get_employee_attendance():
     return response
 
 
-@app.route('/api/Employee/MarkAttendance', methods=['GET'])
+@app.route('/api/Employee/MarkAttendance', methods=['POST'])
 def mark_attendance():
-    employee_id = request.args.get('employee_id')
-   #  if 'files' not in request.files:
-   #      return jsonify({'message': 'No files part'}), 400
-   #  files = request.files.get('files')
-   #  if not files:
-   #      return jsonify({'message': 'No files selected'}), 400
-   #
-   #  video_path = os.path.join('temp_videos', 'attendance.mp4')
-   #  files.save(video_path)
-    response = EmployeeController.mark_attendance(employee_id) #video_path
+    if 'file' not in request.files:
+        return jsonify({'message': 'No files part'}), 400
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'message': 'No files selected'}), 400
+    response = AutomationController.mark_attendance(file)
     # os.remove(video_path)
     return response
 

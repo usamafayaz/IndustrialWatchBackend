@@ -23,7 +23,6 @@ from Models.User import User
 from Models.Violation import Violation
 from Models.ViolationImages import ViolationImages
 from detection_models.facenet_training import FacenetTraining
-
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 
@@ -74,7 +73,7 @@ def add_employee(data):
                 delete_user_and_employee(user, employee)
                 return jsonify({'message': 'Error in adding employee,Try again'}), 500
             # employee_id = session.query(Employee.id).filter(Employee.id == user.id).first()
-            mark_attendance(employee.id)
+            # mark_attendance(employee.id)
             is_employee_added_to_sec = add_employee_to_section(employee.id, section_id=data.get('section_id'))
             if is_employee_added_to_sec is False:
                 delete_user_and_employee(user, employee)
@@ -432,9 +431,10 @@ def get_employee_attendance(employee_id):
             return jsonify({'message': str(e)}), 500
 
 
-def mark_attendance(employee_id):  # video_path
+def mark_attendance(employee_id):
     with DBHandler.return_session() as session:
         try:
+
             today = date.today()
             current_year = today.year
             current_month = today.month
@@ -458,6 +458,7 @@ def mark_attendance(employee_id):  # video_path
             # result = AutomationController.mark_attendance(video_path)
             # print(f'attendance result -->> {result}')
             # if result:
+
             return jsonify({'message': 'Attendance Marked'}), 200
             # else:
             #     return jsonify({'message': 'Employee Check Out'}), 200
