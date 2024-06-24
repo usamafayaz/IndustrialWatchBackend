@@ -1,5 +1,6 @@
 import datetime
 import io
+import json
 import os
 import threading
 import time
@@ -378,8 +379,13 @@ def get_defected_images(folder_path):
 def calculate_yield(batchnumber, total_products, defected_products):
     with DBHandler.return_session() as session:
         try:
+            detail_response, status_code = get_batch_details(batchnumber)
+            if status_code != 200:
+                raise Exception(f"Failed to retrieve batch details: {detail_response.get('message', 'Unknown error')}")
+            detail = json.loads(detail_response.data)
+            print(f'total items>{detail['total_piece']}')
             batch = session.query(Batch).filter(Batch.batch_number == batchnumber).first()
-            batch.batch_yield = ((total_products - defected_products) / total_products) * 100
+            batch.batch_yield = ((detail['total_piece'] - defected_products) / detail['total_piece']) * 100
             batch.defected_pieces = defected_products
             session.commit()
         except Exception as e:
@@ -393,7 +399,7 @@ class_names_textile = {0: 'hole', 1: 'yarn defect'}
 
 bottle_conf_thresholds = {
     0: 0.5,
-    1: 0.7,
+    1: 0.5,
     2: 0.1
 }
 
@@ -442,8 +448,8 @@ def defect_monitoring(images, product_number, batch_number):
             elif 'fabric' in product_name or 'textile' in product_name:
                 class_names = class_names_textile
                 class_name = class_names.get(class_id, f'Class {class_id}')
-                classes.append({class_name: total_items - count})
-                print(f'{class_name}: {total_items - count}')
+                classes.append({class_name:  count})
+                print(f'{class_name}: {count}')
             elif 'bottle' in product_name:
                 class_names = class_names_bottle
                 if class_id != 0:
@@ -456,6 +462,7 @@ def defect_monitoring(images, product_number, batch_number):
             'total_defected_items': total_defected_items,
             'defects': classes
         }
+        print(f'response{response}')
         calculate_yield(batch_number, total_items, total_defected_items)
         return jsonify(response), 200
     except Exception as e:
@@ -465,7 +472,6 @@ def defect_monitoring(images, product_number, batch_number):
 def process_image(image_file, total_discs_list, class_counts, defected_items_list, index, folder_path, product_name):
     print(f"Thread {index} started")
     total_items = 0
-    print(type(image_file))
     print(image_file)
     img_stream = image_file.read()
     nparr = np.frombuffer(img_stream, np.uint8)
@@ -517,10 +523,13 @@ def process_image(image_file, total_discs_list, class_counts, defected_items_lis
             defected_items_list[index] = 1
     else:
         total_items += 1
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
-        save_path = os.path.join(folder_path, f'processed_{timestamp}.jpg')
-        cv2.imwrite(save_path, cv2.cvtColor(img_with_boxes, cv2.COLOR_RGB2BGR))
+        if any(class_id == 0 or class_id == 1 for class_id in unique_classes):
+            defected_items_list[index] = 1
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+            save_path = os.path.join(folder_path, f'processed_{timestamp}.jpg')
+            cv2.imwrite(save_path, cv2.cvtColor(img_with_boxes, cv2.COLOR_RGB2BGR))
         total_discs_list[index] = total_items
+        print(f'Returned defected item {defected_items_list}')
     return defected_items_list
 
 
@@ -562,11 +571,10 @@ def predict_with_model(img, class_counts, model_path):
 
 
 def angles_monitoring(front_image, back_image, side_images):
-    model = YOLO('trained_models/disk_model.pt')
     defect_classes = [0, 1, 3]  # Classes representing defects
     side_defect_class = 0  # Side cut defect class
 
-    overall_status = "ok product"
+    overall_status = "Ok Product"
     class_count = {}
     defects_report = {
         "front": [],
@@ -575,30 +583,35 @@ def angles_monitoring(front_image, back_image, side_images):
     }
 
     # Predict defects for front image
-    f_image, f_classes = predict_with_model(convert_image_to_ndArrary(front_image), class_count, 'trained_models/disk_model.pt')
+    f_image, f_classes = predict_with_model(convert_image_to_ndArrary(front_image), class_count,
+                                            'trained_models/disk_model.pt')
     for class_id in f_classes:
         if class_id in defect_classes:
             defects_report["front"].append(class_names_disc.get(class_id))
-            overall_status = "defected product"
+            overall_status = "Defected Product"
 
     # Predict defects for back image
-    b_image, b_classes = predict_with_model(convert_image_to_ndArrary(back_image), class_count, 'trained_models/disk_model.pt')
+    b_image, b_classes = predict_with_model(convert_image_to_ndArrary(back_image), class_count,
+                                            'trained_models/disk_model.pt')
     for class_id in b_classes:
         if class_id in defect_classes:
             defects_report["back"].append(class_names_disc.get(class_id))
-            overall_status = "defected product"
+            overall_status = "Defected Product"
 
     # Predict defects for side images
     for idx, side_image in enumerate(side_images):
-        s_image, s_classes = predict_with_model(convert_image_to_ndArrary(side_image), class_count, 'trained_models/side_cut_model.pt')
+        s_image, s_classes = predict_with_model(convert_image_to_ndArrary(side_image), class_count,
+                                                'trained_models/side_cut_model.pt')
         for class_id in s_classes:
             if class_id == side_defect_class:
-                defects_report["sides"].append({"side": idx + 1, "defect": "side_cut"})
-                overall_status = "defected product"
+                defects_report["sides"].append({"side": idx + 1, "defect": "side-cut"})
+                overall_status = "Defected Product"
 
     return jsonify({'status': overall_status, 'defects_report': defects_report}), 200
+
+
 def convert_image_to_ndArrary(image):
-    img_stream = image.read()
-    nparr = np.frombuffer(img_stream, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    img_stream = image.read()  # Read the file content
+    nparr = np.frombuffer(img_stream, np.uint8)  # Read the file content
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)  # Decode the image
     return img

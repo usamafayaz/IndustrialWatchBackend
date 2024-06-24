@@ -136,8 +136,6 @@ def process_images():
 
 @app.route('/api/Production/AnglesMonitoring', methods=['POST'])
 def angles_monitoring():
-    # Retrieve the files from the request
-    #images = request.files.get('images')
     if 'sides' not in request.files or 'front'not in request.files or 'back'not in request.files:
         return jsonify({'message': 'No files part'}), 500
     side_images = request.files.getlist('sides')

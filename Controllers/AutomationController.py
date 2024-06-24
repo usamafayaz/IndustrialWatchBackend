@@ -486,7 +486,6 @@ def mark_attendance(file):
             employee = is_industry_employee(ProductionController.convert_image_to_ndArrary(file),False)
             if employee is None:
                 print(f'Unrecognized Face')
-
                 return jsonify({'message': 'Employee Not Found'}), 404
             else:
                 attendance = session.query(Attendance).filter(Attendance.employee_id == employee['employee_id']).filter(Attendance.attendance_date==Util.get_current_date()).first()
@@ -494,7 +493,7 @@ def mark_attendance(file):
                     print(f'Attendance --->> {attendance.attendance_date}')
                     attendance.check_out = datetime.now().strftime('%H:%M:%S')
                     session.commit()
-                    return jsonify({'message': 'Attendance Marked'}), 200
+                    return jsonify({'message': f'Attendance Marked for {employee['employee_name']}'}), 200
                 else:
                     session.add(Attendance(
                         check_in=datetime.now().strftime('%H:%M:%S'),
@@ -502,7 +501,7 @@ def mark_attendance(file):
                         employee_id=employee['employee_id']
                     ))
                     session.commit()
-                    return jsonify({'message': 'Attendance Marked'}), 200
+                    return jsonify({'message': f'Attendance Marked for {employee['employee_name']}'}), 200
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
