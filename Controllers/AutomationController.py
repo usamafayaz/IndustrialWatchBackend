@@ -89,10 +89,10 @@ def detect_employee_violation(file_path):
 def predict_with_model(img, model, confidence):
     if confidence:
         results = model.predict(img, classes=[0, 67], save=True, imgsz=640, show_boxes=True, show_labels=True,
-                                show=True, conf=confidence)
+                                show=False, conf=confidence)
     else:
         results = model.predict(img, classes=[0, 67], save=True, imgsz=640, show_boxes=True, show_labels=True,
-                                show=True)
+                                show=False)
 
     class_id = None
     for result in results:
@@ -254,18 +254,33 @@ def calculate_productivity(employee_id):
                                 row.fine / allowed_duration.total_seconds())
                         total_fine = total_fine + fine
                 print(f' {days_without_weekend}attendance -->> {(total_working_days / days_without_weekend) * 100}')
-                print(f'halwa -->> {total_fine / total_working_days}')
+                print(f'total fine/total working days -->> {total_fine / total_working_days}')
                 total_attendance = f"{total_working_days}/{num_days}"
                 calculated_productivity = (
                         ((total_fine / max_fine) * 100) + ((total_working_days / num_days) * 100) / 2)
                 print(f'calculated productivity-->>', calculated_productivity)
-                productivity_from_db = session.query(EmployeeProductivity).filter(
-                    EmployeeProductivity.employee_id == employee_id) \
-                    .filter(extract('month', EmployeeProductivity.productivity_month) == current_month) \
-                    .first()
+                # Calculate the Monthly Attendance Score
+                monthly_attendance_score = ((total_working_days-days_without_weekend    ) / days_without_weekend) * 100
+
+                # Calculate the Monthly Violation Score
+                monthly_violation_score = (total_fine / max_fine) * 100 if max_fine else 0
+
+                # Calculate the Monthly Productivity Score using the given weights
+                w_a = 0.3
+                w_v = 0.7
+                monthly_productivity_score =(100-(w_a * monthly_attendance_score) - (w_v * monthly_violation_score))
+                print(
+                    f'monthly_attendance_score {monthly_attendance_score} and monthly_violation_score{monthly_violation_score} and monthly_productivity_score{monthly_productivity_score}')
+                if monthly_productivity_score>=0:
+                    productivity_from_db = session.query(EmployeeProductivity).filter(
+                        EmployeeProductivity.employee_id == employee_id) \
+                        .filter(extract('month', EmployeeProductivity.productivity_month) == current_month) \
+                        .first()
+                else:
+                    monthly_productivity_score=0.0
                 # if not productivity_from_db and  productivity_from_db.productivity!=0 :
-                productivity_from_db.productivity = productivity_from_db.productivity - round(calculated_productivity,
-                                                                                              3)
+                productivity_from_db.productivity =  round(monthly_productivity_score,
+                                                           3)
                 session.commit()
     except Exception as e:
         return None

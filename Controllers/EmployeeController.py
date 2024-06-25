@@ -353,21 +353,23 @@ def get_employee_detail(employee_id):
                 .all()
             if result:
                 for row in result:
-                    start_time = datetime.strptime(str(row.start_time), "%H:%M:%S")
-                    end_time = datetime.strptime(str(row.end_time), "%H:%M:%S") if row.end_time else None
-                    allowed_time = datetime.strptime(str(row.allowed_time), "%H:%M:%S")
-                    duration = end_time - start_time
-                    allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
-                                                 seconds=allowed_time.second)
+                    if row.start_time is not None or row.end_time is not None:
+                        print(f'Attendance Row -->> {row}')
+                        start_time = datetime.strptime(str(row.start_time), "%H:%M:%S")
+                        end_time = datetime.strptime(str(row.end_time), "%H:%M:%S") if row.end_time else None
+                        allowed_time = datetime.strptime(str(row.allowed_time), "%H:%M:%S")
+                        duration = end_time - start_time
+                        allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
+                                                     seconds=allowed_time.second)
 
-                    temp = ((days_without_weekend * 8) - round(
-                        ((allowed_duration.total_seconds() / 3600) * days_without_weekend), 4)) * row.fine
-                    max_fine = max_fine + temp
-                    # condition to check duration and allowed time
-                    if duration > allowed_duration:
-                        fine = ((duration - allowed_duration).total_seconds()) * (
-                                row.fine / allowed_duration.total_seconds())
-                        total_fine = total_fine + fine
+                        temp = ((days_without_weekend * 8) - round(
+                            ((allowed_duration.total_seconds() / 3600) * days_without_weekend), 4)) * row.fine
+                        max_fine = max_fine + temp
+                        # condition to check duration and allowed time
+                        if duration > allowed_duration:
+                            fine = ((duration - allowed_duration).total_seconds()) * (
+                                    row.fine / allowed_duration.total_seconds())
+                            total_fine = total_fine + fine
             total_working_days = session.query(func.count(Attendance.id)).filter(
                 func.year(Attendance.attendance_date) == current_year,
                 func.month(Attendance.attendance_date) == current_month,
@@ -614,6 +616,7 @@ def get_employee_summary(employee_id, date):
             cal = calendar.monthcalendar(year,month)
 
             total_fine = 0
+            total_violation=0
 
             # Fetch the total fine and violation count
             result = session.query(Violation.start_time, Violation.end_time, Violation.date, SectionRule.allowed_time,
@@ -628,17 +631,19 @@ def get_employee_summary(employee_id, date):
                 .all()
             if result:
                 for row in result:
-                    start_time = datetime.strptime(str(row.start_time), "%H:%M:%S")
-                    end_time = datetime.strptime(str(row.end_time), "%H:%M:%S") if row.end_time else None
-                    allowed_time = datetime.strptime(str(row.allowed_time), "%H:%M:%S")
-                    duration = end_time - start_time
-                    allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
-                                                 seconds=allowed_time.second)
-                    # condition to check duration and allowed time
-                    if duration > allowed_duration:
-                        fine = ((duration - allowed_duration).total_seconds()) * (
-                                row.fine / allowed_duration.total_seconds())
-                        total_fine = total_fine + fine
+                    if row.start_time is not None or row.end_time is not None:
+                        start_time = datetime.strptime(str(row.start_time), "%H:%M:%S")
+                        end_time = datetime.strptime(str(row.end_time), "%H:%M:%S") if row.end_time else None
+                        allowed_time = datetime.strptime(str(row.allowed_time), "%H:%M:%S")
+                        duration = end_time - start_time
+                        allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
+                                                     seconds=allowed_time.second)
+                         # condition to check duration and allowed time
+                        if duration > allowed_duration:
+                            total_violation=total_violation+1
+                            fine = ((duration - allowed_duration).total_seconds()) * (
+                                    row.fine / allowed_duration.total_seconds())
+                            total_fine = total_fine + fine
 
             # Fetch attendance records
             attendance = session.query(Attendance).filter(
@@ -683,7 +688,7 @@ def get_employee_summary(employee_id, date):
             # Serialize the summary
             serialize_summary = {
                 "total_fine": total_fine,
-                "violation_count": len(result),
+                "violation_count": total_violation,
                 "attendance_rate": attendance_rate
             }
 
