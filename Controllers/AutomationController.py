@@ -12,6 +12,7 @@ from ultralytics import YOLO
 
 import DBHandler
 import Util
+from Controllers import ProductionController
 from Models.Attendance import Attendance
 from Models.Employee import Employee
 from Models.EmployeeProductivity import EmployeeProductivity
@@ -23,7 +24,7 @@ from Models.Violation import Violation
 from Models.ViolationImages import ViolationImages
 from detection_models.facenet_predict import FaceRecognition
 from trained_models import sitting_model
-from Controllers import ProductionController
+
 timeIntervals = {
     "start_time": None,
     "end_time": None
@@ -32,8 +33,8 @@ timeIntervals = {
 result_queue = queue.Queue()
 
 
-def detect_employee_violation(file_path):
-    employee = is_industry_employee(file_path,True)
+def detect_employee_violation(file_path, section_id):
+    employee = is_industry_employee(file_path, True, section_id)
     if employee is None:
         return jsonify({'message': 'Employee Not Found'}), 404
     else:
@@ -82,17 +83,17 @@ def detect_employee_violation(file_path):
             serialized_list.append({'rule_name': rule_name, 'total_time': result})
             serialized_result = {'employee_name': employee['employee_name'], 'rules': serialized_list}
         calculate_productivity(employee['employee_id'])
-        print(f'serialized_result is', serialized_result)
+        print(f'serialized_result is', serialized_result if serialized_result else "None")
         return jsonify(serialized_result), 200
 
 
 def predict_with_model(img, model, confidence):
     if confidence:
         results = model.predict(img, classes=[0, 67], save=True, imgsz=640, show_boxes=True, show_labels=True,
-                                show=False, conf=confidence)
+                                show=True, conf=confidence)
     else:
         results = model.predict(img, classes=[0, 67], save=True, imgsz=640, show_boxes=True, show_labels=True,
-                                show=False)
+                                show=True)
 
     class_id = None
     for result in results:
@@ -260,7 +261,7 @@ def calculate_productivity(employee_id):
                         ((total_fine / max_fine) * 100) + ((total_working_days / num_days) * 100) / 2)
                 print(f'calculated productivity-->>', calculated_productivity)
                 # Calculate the Monthly Attendance Score
-                monthly_attendance_score = ((total_working_days-days_without_weekend    ) / days_without_weekend) * 100
+                monthly_attendance_score = ((days_without_weekend-total_working_days ) / days_without_weekend) * 100
 
                 # Calculate the Monthly Violation Score
                 monthly_violation_score = (total_fine / max_fine) * 100 if max_fine else 0
@@ -268,19 +269,19 @@ def calculate_productivity(employee_id):
                 # Calculate the Monthly Productivity Score using the given weights
                 w_a = 0.3
                 w_v = 0.7
-                monthly_productivity_score =(100-(w_a * monthly_attendance_score) - (w_v * monthly_violation_score))
+                monthly_productivity_score = (100 - ((w_a * monthly_attendance_score) + (w_v * monthly_violation_score)))
                 print(
                     f'monthly_attendance_score {monthly_attendance_score} and monthly_violation_score{monthly_violation_score} and monthly_productivity_score{monthly_productivity_score}')
-                if monthly_productivity_score>=0:
+                if monthly_productivity_score >= 0:
                     productivity_from_db = session.query(EmployeeProductivity).filter(
                         EmployeeProductivity.employee_id == employee_id) \
                         .filter(extract('month', EmployeeProductivity.productivity_month) == current_month) \
                         .first()
                 else:
-                    monthly_productivity_score=0.0
+                    monthly_productivity_score = 0.0
                 # if not productivity_from_db and  productivity_from_db.productivity!=0 :
-                productivity_from_db.productivity =  round(monthly_productivity_score,
-                                                           3)
+                productivity_from_db.productivity = round(monthly_productivity_score,
+                                                          3)
                 session.commit()
     except Exception as e:
         return None
@@ -391,7 +392,7 @@ def sitting_detection(video_path, employee_id, rule_id, result_queue):
     result_queue.put((rule_id, result))
 
 
-def is_industry_employee(file_path,is_video):
+def is_industry_employee(file_path, is_video, section_id_for_special_section):
     if is_video:
         image = extract_frame_from(file_path)
     else:
@@ -402,7 +403,12 @@ def is_industry_employee(file_path,is_video):
         print("Person ID", person)
         if person is not None and person != 'No face detected':
             print(f'Employee ID of Detected Person = {person[0]}')
-            section_id = get_employee_section_id(int(person[0]))
+            if section_id_for_special_section:
+                section_id = check_section_for_employee(section_id_for_special_section)
+                if section_id is None:
+                    return None
+            else:
+                section_id = get_employee_section_id(int(person[0]))
             print(f'Section ID of Detected Person = {section_id}')
             section_detail = get_section_detail(section_id)
             employee_name = get_employee_detail(int(person[0]))
@@ -420,6 +426,7 @@ def is_industry_employee(file_path,is_video):
                     'allowed_time': rule['allowed_time']
                 }
                 employee['section_rules'].append(obj)
+            print(f"Section from is industry {employee}")
             return employee
         else:
             return None
@@ -495,20 +502,30 @@ def get_employee_section_id(employee_id):
             return None
 
 
+def check_section_for_employee(section_id):
+    with DBHandler.return_session() as session:
+        try:
+            section = session.query(EmployeeSection).filter(EmployeeSection.section_id == section_id).first()
+            return section.section_id
+        except Exception as e:
+            return None
+
+
 def mark_attendance(file):
     try:
         with DBHandler.return_session() as session:
-            employee = is_industry_employee(ProductionController.convert_image_to_ndArrary(file),False)
+            employee = is_industry_employee(ProductionController.convert_image_to_ndArrary(file), False, None)
             if employee is None:
                 print(f'Unrecognized Face')
                 return jsonify({'message': 'Employee Not Found'}), 404
             else:
-                attendance = session.query(Attendance).filter(Attendance.employee_id == employee['employee_id']).filter(Attendance.attendance_date==Util.get_current_date()).first()
+                attendance = session.query(Attendance).filter(Attendance.employee_id == employee['employee_id']).filter(
+                    Attendance.attendance_date == Util.get_current_date()).first()
                 if attendance is not None:
                     print(f'Attendance --->> {attendance.attendance_date}')
                     attendance.check_out = datetime.now().strftime('%H:%M:%S')
                     session.commit()
-                    return jsonify({'message': f'Attendance Marked for {employee['employee_name']}'}), 200
+                    return jsonify({'message': f'Attendance Marked for {employee["employee_name"]}'}), 200
                 else:
                     session.add(Attendance(
                         check_in=datetime.now().strftime('%H:%M:%S'),
@@ -516,7 +533,7 @@ def mark_attendance(file):
                         employee_id=employee['employee_id']
                     ))
                     session.commit()
-                    return jsonify({'message': f'Attendance Marked for {employee['employee_name']}'}), 200
+                    return jsonify({'message': f'Attendance Marked for {employee["employee_name"]}'}), 200
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
@@ -545,3 +562,13 @@ def add_violation_images(path, captured_violations, violation_id, employee_id, r
     except Exception as e:
         print(f'excep -->> {str(e)}')
         return False
+
+
+def get_special_section(section_id):
+    with DBHandler.return_session() as session:
+        try:
+            section = session.query(Section).filter(Section.id == section_id).filter(Section.is_sepecial == 1).first()
+            return section
+        except Exception as e:
+            print(f'excep -->> {str(e)}')
+            return False

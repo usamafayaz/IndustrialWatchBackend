@@ -4,20 +4,24 @@ from flask import jsonify
 from sqlalchemy import select
 
 import DBHandler
+import Util
 from Models.ProductivityRule import ProductivityRule
 from Models.Section import Section
+from Models.EmployeeSection import EmployeeSection
+from Models.Employee import Employee
 from Models.SectionRule import SectionRule
 
 
 def insert_section(data):
     with DBHandler.return_session() as session:
         try:
-            section = Section(name=data['name'], status=1)
+            section = Section(name=data['name'], status=1, is_sepecial=data['is_special'])
             session.add(section)
             session.commit()
             section = session.query(Section).where(Section.name == section.name).first()
             if section == None:
                 return jsonify({'message': 'Section is not Added check input Data please!'}), 500
+            apply_special_section_to_all_existing(section_id=section.id)
             rules = data['rules']
             if insert_rules_in_section(rules, section_id=section.id) == False:
                 return jsonify({'message': f'Unable to get Rules check input Data please!'}), 500
@@ -45,10 +49,15 @@ def insert_rules_in_section(rules, section_id):
         return False
 
 
-def get_all_sections(status):
+def get_all_sections(status, is_special=False):
     with DBHandler.return_session() as session:
         try:
-            sections = session.query(Section).filter(Section.status == status).all()
+            if is_special:
+                sections = session.query(Section).filter(Section.status == status).all()
+            else:
+                sections = session.query(Section).filter(Section.status == status).filter(
+                    Section.is_sepecial == 0).all()
+            # sections = session.query(Section).filter(Section.status == status).all()
             if sections:
                 sections_data = []
                 for section in sections:
@@ -141,3 +150,39 @@ def get_all_rules():
 
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+
+
+def get_supervisor_section_and_special(employee_id):
+    with DBHandler.return_session() as session:
+        try:
+            sections = session.query(Section).join(EmployeeSection, Section.id == EmployeeSection.section_id).filter(
+                Section.status == 1).filter(EmployeeSection.employee_id == employee_id).all()
+            if sections:
+                sections_data = []
+                for section in sections:
+                    data = {
+                        'id': section.id,
+                        'name': section.name,
+                        'status': section.status
+                    }
+                    sections_data.append(data)
+                print(f"get_supervisor_section_and_special {sections_data}")
+                return jsonify(sections_data), 200
+            else:
+                return jsonify({'message': "No section found"}), 500
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+
+def apply_special_section_to_all_existing(section_id):
+    with DBHandler.return_session() as session:
+        try:
+            all_existing_employee = session.query(Employee).all()
+            for employee in all_existing_employee:
+                session.add(
+                    EmployeeSection(section_id=section_id, employee_id=employee.id, date_time=Util.get_current_date()))
+            session.commit()
+            return True
+        except Exception as e:
+            print(f" Exception for apply_special_section_to_all_existing {str(e)} ")
+            return None

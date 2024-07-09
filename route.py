@@ -3,14 +3,14 @@ import os.path
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from Controllers import ProductionController, EmployeeController, SectionController,AutomationController
+from Controllers import ProductionController, EmployeeController, SectionController, AutomationController
 
 app = Flask(__name__)
 app.config['EmployeeImages'] = 'EmployeeImages'
 app.config['ViolationImages'] = 'ViolationImages'
 
 
-#%%%%%%%%%%%%%%%%%%%    ProductionController   %%%%%%%%%%%%%%%%%%%%%%%
+# %%%%%%%%%%%%%%%%%%%    ProductionController   %%%%%%%%%%%%%%%%%%%%%%%
 @app.route('/api/Production/AddRawMaterial', methods=['POST'])
 def add_raw_material():
     response = ProductionController.add_raw_material(request.args.get('name'))
@@ -126,6 +126,7 @@ def get_defected_images():
     response = ProductionController.get_defected_images(folder_path)
     return response
 
+
 @app.route('/api/Production/DefectMonitoring', methods=['POST'])
 def process_images():
     images = request.files.getlist('images')
@@ -134,19 +135,21 @@ def process_images():
     response = ProductionController.defect_monitoring(images, product_number, batch_number)
     return response
 
+
 @app.route('/api/Production/AnglesMonitoring', methods=['POST'])
 def angles_monitoring():
-    if 'sides' not in request.files or 'front'not in request.files or 'back'not in request.files:
+    if 'sides' not in request.files or 'front' not in request.files or 'back' not in request.files:
         return jsonify({'message': 'No files part'}), 500
     side_images = request.files.getlist('sides')
     front_image = request.files.get('front')
     back_image = request.files.get('back')
     if not side_images or not front_image or not back_image:
         return jsonify({'message': 'No files selected'}), 500
-    response = ProductionController.angles_monitoring(front_image,back_image,side_images)
+    response = ProductionController.angles_monitoring(front_image, back_image, side_images)
     return response
 
-#%%%%%%%%%%%%%%%%%%%    SectionController   %%%%%%%%%%%%%%%%%%%%%%%
+
+# %%%%%%%%%%%%%%%%%%%    SectionController   %%%%%%%%%%%%%%%%%%%%%%%
 @app.route('/api/Section/InsertSection', methods=['POST'])
 def insert_section():
     data = request.get_json()
@@ -157,7 +160,10 @@ def insert_section():
 @app.route('/api/Section/GetAllSections', methods=['GET'])
 def get_all_section():
     status = request.args.get('status')
-    response = SectionController.get_all_sections(int(status))
+    if request.args.get('is_special'):
+        response = SectionController.get_all_sections(int(status), True)
+    else:
+        response = SectionController.get_all_sections(int(status))
     return response
 
 
@@ -165,6 +171,13 @@ def get_all_section():
 def get_section_detail():
     section_id = request.args.get('section_id')
     response = SectionController.get_section_detail(section_id)
+    return response
+
+
+@app.route('/api/Section/GetSpecialSection', methods=['GET'])
+def get_special_section():
+    employee_id = request.args.get('employee_id')
+    response = SectionController.get_supervisor_section_and_special(employee_id)
     return response
 
 
@@ -188,7 +201,7 @@ def get_all_rules():
     return response
 
 
-#%%%%%%%%%%%%%%%%%%%    EmployeeController   %%%%%%%%%%%%%%%%%%%%%%%
+# %%%%%%%%%%%%%%%%%%%    EmployeeController   %%%%%%%%%%%%%%%%%%%%%%%
 @app.route('/api/Employee/Login', methods=['GET'])
 def login():
     response = EmployeeController.login(username=request.args.get('username'), password=request.args.get('password'))
@@ -216,12 +229,28 @@ def add_employee():
     return response
 
 
+@app.route('/api/Employee/AddGuest', methods=['POST'])
+def add_guest():
+    if 'files' not in request.files:
+        return jsonify({'message': 'No files part'}), 500
+    files = request.files.getlist('files')
+    if not files:
+        return jsonify({'message': 'No files selected'}), 500
+    name = request.form.get('name')
+    data = {'name': name, 'images': files}
+    response = EmployeeController.add_guest(data)
+    return response
+
+
 @app.route('/api/Employee/GetAllJobRoles', methods=['GET'])
 def get_all_job_roles():
     response = EmployeeController.get_all_job_roles()
     return response
 
-
+@app.route('/api/Employee/GetAllGuests', methods=['GET'])
+def get_all_guest():
+    response = EmployeeController.get_all_guest()
+    return response
 @app.route('/api/Employee/GetAllSupervisors', methods=['GET'])
 def get_all_supervisors():
     response = EmployeeController.get_all_supervisors()
@@ -276,9 +305,8 @@ def mark_attendance():
     return response
 
 
-
 @app.route('/api/EmployeeImage/<int:employee_id>/<path:image_path>', methods=['GET'])
-def get_image(employee_id,image_path):
+def get_image(employee_id, image_path):
     return send_from_directory(f'EmployeeImages/{employee_id}', image_path)
 
 
@@ -287,10 +315,17 @@ def get_all_violations():
     employee_id = request.args.get('employee_id')
     response = EmployeeController.get_employee_violations(employee_id)
     return response
+@app.route('/api/Employee/GetAllGuestViolations', methods=['GET'])
+def get_all_guest_violations():
+    employee_id = request.args.get('employee_id')
+    response = EmployeeController.get_violation_for_guest(employee_id)
+    return response
+
 
 @app.route('/api/ViolationImages/<path:image_path>', methods=['GET'])
 def get_violation_image(image_path):
     return send_from_directory('ViolationImages', image_path)
+
 
 @app.route('/api/Employee/GetViolationDetails', methods=['GET'])
 def get_violation_detail():
@@ -298,6 +333,11 @@ def get_violation_detail():
     response = EmployeeController.get_violation_details(violation_id)
     return response
 
+@app.route('/api/Employee/GetGuestViolationDetails', methods=['GET'])
+def get_guest_violation_detial():
+    violation_id = request.args.get('violation_id')
+    response = EmployeeController.get_guest_violation_detial(violation_id)
+    return response
 
 @app.route('/api/Employee/GetEmployeeSummary', methods=['GET'])
 def get_employee_summary():
@@ -319,12 +359,16 @@ def update_employee_profile():
     data = request.get_json()
     response = EmployeeController.update_employee_profile(data)
     return response
+
+
 @app.route('/api/Automation/PredictEmployeeViolation', methods=['POST'])
 def predict_employee_violation():
     if 'files' not in request.files:
         return jsonify({'message': 'No files part'}), 400
 
     files = request.files.getlist('files')
+    print(f'request --> {request.form.get("section_id")}')
+    section_id = int(request.form.get('section_id'))
     if not files:
         return jsonify({'message': 'No files selected'}), 400
 
@@ -332,14 +376,12 @@ def predict_employee_violation():
     video_path = os.path.join('temp_videos', 'tempvideo.mp4')
     file.save(video_path)
 
-
     # Extract frame from video
-    response = AutomationController.detect_employee_violation(video_path)
+    response = AutomationController.detect_employee_violation(video_path, section_id)
 
     if response is None:
         return jsonify({'message': 'Unable to Save Frame'}), 500
     return response
-
 
 
 if __name__ == '__main__':

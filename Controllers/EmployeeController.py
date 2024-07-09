@@ -23,6 +23,7 @@ from Models.User import User
 from Models.Violation import Violation
 from Models.ViolationImages import ViolationImages
 from detection_models.facenet_training import FacenetTraining
+
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 
@@ -61,7 +62,7 @@ def add_employee(data):
             employee = Employee(name=data.get('name'), salary=data.get('salary'),
                                 job_role_id=data.get('job_role_id'),
                                 job_type=data.get('job_type'), date_of_joining=Util.get_current_date(),
-                                gender=data.get('gender'), user_id=user.id)
+                                gender=data.get('gender'), user_id=user.id,is_guest=0)
             session.add(employee)
             session.commit()
             productivity = EmployeeProductivity(employee_id=employee.id, productivity=100,
@@ -74,6 +75,7 @@ def add_employee(data):
                 return jsonify({'message': 'Error in adding employee,Try again'}), 500
             # employee_id = session.query(Employee.id).filter(Employee.id == user.id).first()
             # mark_attendance(employee.id)
+            add_employee_to_sepical_section(employee_id=employee.id, is_for_all=False)
             is_employee_added_to_sec = add_employee_to_section(employee.id, section_id=data.get('section_id'))
             if is_employee_added_to_sec is False:
                 delete_user_and_employee(user, employee)
@@ -155,6 +157,23 @@ def add_employee_to_section(employee_id, section_id, ):
             return False
 
 
+def add_employee_to_sepical_section(employee_id, is_for_all):
+    with DBHandler.return_session() as session:
+        try:
+            if is_for_all:
+                special_section = session.query(Section).all()
+            else:
+                special_section = session.query(Section).filter(Section.is_sepecial == 1).all()
+            if special_section:
+                for section in special_section:
+                    session.add(EmployeeSection(employee_id=employee_id, section_id=section.id,
+                                                date_time=Util.get_current_date()))
+                    session.commit()
+                return True
+        except Exception as e:
+            return False
+
+
 def get_all_job_roles():
     with DBHandler.return_session() as session:
         try:
@@ -181,7 +200,8 @@ def get_all_supervisors():
                 join(EmployeeSection, Employee.id == EmployeeSection.employee_id). \
                 join(Section, Section.id == EmployeeSection.section_id). \
                 join(User, User.id == Employee.user_id). \
-                filter(User.user_role == 'Supervisor').all()
+                filter(User.user_role == 'Supervisor'). \
+                filter(Section.is_sepecial == 0).all()
             if supervisors:
                 supervisors_dict = {}
                 for supervisor in supervisors:
@@ -239,7 +259,9 @@ def update_supervisor(data):
                 Employee.id == data.get('employee_id')).first()
             if supervisor:
                 # Fetch all EmployeeSection objects related to the supervisor
-                employee_sections = session.query(EmployeeSection).filter(
+                employee_sections = session.query(EmployeeSection).join(Section,
+                                                                        EmployeeSection.section_id == Section.id). \
+                    filter(Section.is_sepecial == 0).filter(
                     EmployeeSection.employee_id == data.get('employee_id')).all()
 
                 # Delete all fetched EmployeeSection objects
@@ -278,6 +300,7 @@ def get_all_employees(section_id, ranking_required):
                         .join(EmployeeProductivity, EmployeeProductivity.employee_id == Employee.id) \
                         .join(Section, EmployeeSection.section_id == Section.id) \
                         .join(JobRole, Employee.job_role_id == JobRole.id) \
+                        .filter(Section.is_sepecial == 0) \
                         .all()
                 else:
                     employees = session.query(Employee.id, Employee.name, Section.name, JobRole.name,
@@ -298,6 +321,7 @@ def get_all_employees(section_id, ranking_required):
                         .join(Section, EmployeeSection.section_id == Section.id) \
                         .join(JobRole, Employee.job_role_id == JobRole.id) \
                         .order_by(EmployeeProductivity.productivity.desc()) \
+                        .filter(Section.is_sepecial == 0) \
                         .all()
                 else:
                     employees = session.query(Employee.id, Employee.name, Section.name, JobRole.name,
@@ -354,7 +378,6 @@ def get_employee_detail(employee_id):
             if result:
                 for row in result:
                     if row.start_time is not None or row.end_time is not None:
-                        print(f'Attendance Row -->> {row}')
                         start_time = datetime.strptime(str(row.start_time), "%H:%M:%S")
                         end_time = datetime.strptime(str(row.end_time), "%H:%M:%S") if row.end_time else None
                         allowed_time = datetime.strptime(str(row.allowed_time), "%H:%M:%S")
@@ -383,7 +406,8 @@ def get_employee_detail(employee_id):
             if total_fine is None:
                 total_fine = 0
             return jsonify(
-                {'total_fine': total_fine, 'productivity':round(productivity,3), "total_attendance": total_attendance})
+                {'total_fine': total_fine, 'productivity': round(productivity, 3),
+                 "total_attendance": total_attendance})
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
@@ -468,32 +492,46 @@ def mark_attendance(employee_id):
             return jsonify({'message': str(e)}), 500
 
 
-
 def get_employee_violations(employee_id):
     with DBHandler.return_session() as session:
         try:
-            violations = session.query(
-                EmployeeSection.employee_id,
-                Violation.id.label('violation_id'),
-                Violation.date,
-                Violation.start_time,
-                Violation.end_time,
-                ProductivityRule.name.label('rule_name'),
-                SectionRule.allowed_time,
-                SectionRule.fine,
-                EmployeeSection.section_id,
-                Section.name.label('section_name'),
-                ViolationImages.image_url,
-                ViolationImages.capture_time
-            ).select_from(Violation) \
-                .join(ProductivityRule, Violation.rule_id == ProductivityRule.id) \
-                .join(SectionRule, (Violation.rule_id == SectionRule.rule_id)) \
-                .join(EmployeeSection, (Violation.employee_id == EmployeeSection.employee_id) & (
-                    SectionRule.section_id == EmployeeSection.section_id)) \
-                .join(Section, EmployeeSection.section_id == Section.id) \
-                .outerjoin(ViolationImages, Violation.id == ViolationImages.violation_id) \
-                .filter(Violation.employee_id == employee_id) \
-                .all()
+
+            employee=session.query(Employee).filter(Employee.id==employee_id).first()
+
+            if employee.is_guest:
+                violations = session.query(
+                    Violation.id.label('violation_id'),
+                    Violation.date,
+                    Violation.start_time,
+                    Violation.end_time,
+                    ViolationImages.image_url,
+                    ViolationImages.capture_time
+                ).filter(Violation.employee_id == employee_id) \
+                    .all()
+                print(f"violation for guest ==>> {violations}")
+            else:
+                violations = session.query(
+                    EmployeeSection.employee_id,
+                    Violation.id.label('violation_id'),
+                    Violation.date,
+                    Violation.start_time,
+                    Violation.end_time,
+                    ProductivityRule.name.label('rule_name'),
+                    SectionRule.allowed_time,
+                    SectionRule.fine,
+                    EmployeeSection.section_id,
+                    Section.name.label('section_name'),
+                    ViolationImages.image_url,
+                    ViolationImages.capture_time
+                ).select_from(Violation) \
+                    .join(ProductivityRule, Violation.rule_id == ProductivityRule.id) \
+                    .join(SectionRule, (Violation.rule_id == SectionRule.rule_id)) \
+                    .join(EmployeeSection, (Violation.employee_id == EmployeeSection.employee_id) & (
+                        SectionRule.section_id == EmployeeSection.section_id)) \
+                    .join(Section, EmployeeSection.section_id == Section.id) \
+                    .outerjoin(ViolationImages, Violation.id == ViolationImages.violation_id) \
+                    .filter(Violation.employee_id == employee_id) \
+                    .all()
             if not violations:
                 return jsonify({"message": "Violation not found"}), 404
 
@@ -507,6 +545,7 @@ def get_employee_violations(employee_id):
                 duration = end_time - start_time
                 allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
                                              seconds=allowed_time.second)
+                print(f"violation -->>",violations)
                 # condition to check duration and allowed time
                 if duration > allowed_duration:
                     fine = ((duration - allowed_duration).total_seconds()) * (
@@ -516,12 +555,12 @@ def get_employee_violations(employee_id):
                         "date": violation.date.strftime("%d-%m-%Y"),
                         "start_time": violation.start_time.strftime("%H:%M:%S"),
                         "end_time": violation.end_time.strftime("%H:%M:%S") if violation.end_time else None,
-                        "rule_name": violation.rule_name,
-                        "allowed_time": violation.allowed_time.strftime("%H:%M:%S"),
+                        "rule_name": violation.rule_name if violation.rule_name else None,
+                        "allowed_time": violation.allowed_time.strftime("%H:%M:%S") if violation.allowed_time else None,
                         # Ensure allowed_time is formatted correctly
-                        "fine": fine,
-                        "section_id": violation.section_id,
-                        "section_name": violation.section_name,
+                        "fine": fine if fine else None,
+                        "section_id": violation.section_id if violation.section_id else None,
+                        "section_name": violation.section_name if violation.section_name else None,
                         "images": []
                     }
                     # if violation.image_url:
@@ -531,12 +570,82 @@ def get_employee_violations(employee_id):
                     })
 
             return jsonify(list(serialized_violations.values())), 200
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+def get_violation_for_guest(employee_id):
+    with DBHandler.return_session() as session:
+        try:
+
+            employee=session.query(Employee).filter(Employee.id==employee_id).first()
+
+            if employee.is_guest:
+                violations = session.query(
+                    Violation.id.label('violation_id'),
+                    Violation.date,
+                    Violation.start_time,
+                    Violation.end_time,
+                    ViolationImages.image_url,
+                    ViolationImages.capture_time
+                ).filter(Violation.employee_id == employee_id) \
+                    .all()
+                print(f"violation for guest ==>> {violations}")
+            if not violations:
+                return jsonify({"message": "Violation not found"}), 404
+
+            serialized_violations = {}
+            for violation in violations:
+                print(f"violation -->>",violations)
+
+                # if violation.violation_id not in serialized_violations:
+                serialized_violations[violation.violation_id] = {
+                            "violation_id": violation.violation_id,
+                            "date": violation.date.strftime("%d-%m-%Y"),
+                            "start_time": violation.start_time.strftime("%H:%M:%S"),
+                            "end_time": violation.end_time.strftime("%H:%M:%S") if violation.end_time else None,
+                            "images": []
+                        }
+                if violation.image_url:
+                    serialized_violations[violation.violation_id]["images"].append({
+                        "image_url": violation.image_url,
+                        "capture_time": violation.capture_time.strftime("%H:%M:%S") if violation.capture_time else None
+                    })
+                # start_time = datetime.strptime(str(violation.start_time), "%H:%M:%S")
+                # end_time = datetime.strptime(str(violation.end_time), "%H:%M:%S") if violation.end_time else None
+                # allowed_time = datetime.strptime(str(violation.allowed_time), "%H:%M:%S")
+                # duration = end_time - start_time
+                # allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
+                #                              seconds=allowed_time.second)
+                print(f"violation -->>",violations)
+                # condition to check duration and allowed time
+                # if duration > allowed_duration:
+                #     fine = ((duration - allowed_duration).total_seconds()) * (
+                #             violation.fine / allowed_duration.total_seconds())
+                #     serialized_violations[violation.violation_id] = {
+                #         "violation_id": violation.violation_id,
+                #         "date": violation.date.strftime("%d-%m-%Y"),
+                #         "start_time": violation.start_time.strftime("%H:%M:%S"),
+                #         "end_time": violation.end_time.strftime("%H:%M:%S") if violation.end_time else None,
+                #         "rule_name": violation.rule_name if violation.rule_name else None,
+                #         "allowed_time": violation.allowed_time.strftime("%H:%M:%S") if violation.allowed_time else None,
+                #         # Ensure allowed_time is formatted correctly
+                #         "fine": fine if fine else None,
+                #         "section_id": violation.section_id if violation.section_id else None,
+                #         "section_name": violation.section_name if violation.section_name else None,
+                #         "images": []
+                #     }
+                #     # if violation.image_url:
+                #     serialized_violations[violation.violation_id]["images"].append({
+                #         "image_url": violation.image_url,
+                #         "capture_time": violation.capture_time.strftime("%H:%M:%S") if violation.capture_time else None
+                #     })
+
+            return jsonify(list(serialized_violations.values())), 200
 
 
 
         except Exception as e:
             return jsonify({'message': str(e)}), 500
-
 
 def get_violation_images(violation_id, employee_id):
     with DBHandler.return_session() as session:
@@ -606,17 +715,50 @@ def get_violation_details(violation_id):
 
         except Exception as e:
             return jsonify({'message': str(e)}), 500
+def get_guest_violation_detial(violation_id):
+    with DBHandler.return_session() as session:
+        try:
 
+            violations = session.query(
+                Violation.id.label('violation_id'),
+                Violation.date,
+                Violation.start_time,
+                Violation.end_time,
+                ViolationImages.image_url,
+                ViolationImages.capture_time
+            ).select_from(Violation).join(ViolationImages,ViolationImages.violation_id==violation_id).filter(Violation.id == violation_id) \
+                .all()
+            print(f"violation for guest ==>> {violations}")
+            if not violations:
+                return jsonify({"message": "Violation not found"}), 404
+
+            images = [
+                {
+                    "image_url": violation.image_url,
+                    "capture_time": violation.capture_time.strftime("%H:%M:%S")
+                } for violation in violations if violation.image_url
+            ]
+
+            violation = violations[0]
+            serialized_violation = {
+                "violation_id": violation.violation_id,
+                "start_time": violation.start_time.strftime("%H:%M"),
+                "end_time": violation.end_time.strftime("%H:%M"),
+                "images": images
+            }
+            return jsonify(serialized_violation), 200
+
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
 
 def get_employee_summary(employee_id, date):
     with DBHandler.return_session() as session:
         try:
             # Parse the month and year from the date string
             month, year = map(int, date.split(','))
-            cal = calendar.monthcalendar(year,month)
+            cal = calendar.monthcalendar(year, month)
 
             total_fine = 0
-            total_violation=0
 
             # Fetch the total fine and violation count
             result = session.query(Violation.start_time, Violation.end_time, Violation.date, SectionRule.allowed_time,
@@ -638,9 +780,8 @@ def get_employee_summary(employee_id, date):
                         duration = end_time - start_time
                         allowed_duration = timedelta(hours=allowed_time.hour, minutes=allowed_time.minute,
                                                      seconds=allowed_time.second)
-                         # condition to check duration and allowed time
+                        # condition to check duration and allowed time
                         if duration > allowed_duration:
-                            total_violation=total_violation+1
                             fine = ((duration - allowed_duration).total_seconds()) * (
                                     row.fine / allowed_duration.total_seconds())
                             total_fine = total_fine + fine
@@ -688,7 +829,7 @@ def get_employee_summary(employee_id, date):
             # Serialize the summary
             serialize_summary = {
                 "total_fine": total_fine,
-                "violation_count": total_violation,
+                "violation_count": len(result),
                 "attendance_rate": attendance_rate
             }
 
@@ -740,5 +881,53 @@ def update_employee_profile(data):
                 return jsonify({'message': 'Information Updated'}), 200
             else:
                 return jsonify({'message': 'An Error Occured'}), 404
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+
+
+def add_guest(data):
+    with DBHandler.return_session() as session:
+        try:
+            user = add_user(None, None, None)
+            if user is None:
+                return jsonify({'message': 'Error in adding guest,Try again'}), 500
+            employee = Employee(name=data.get('name'), user_id=user.id,is_guest=1)
+            session.add(employee)
+            session.commit()
+            if employee:
+                is_images_saved = add_employee_images(employee.name, employee.id, data.get('images'))
+                if is_images_saved is False:
+                    delete_user_and_employee(user, employee)
+                    return jsonify({'message': 'Error in adding guest,Try again'}), 500
+
+                #is_add = add_employee_to_sepical_section(employee_id=employee.id, is_for_all=True)
+                # if is_add is False:
+                #     delete_user_and_employee(user, employee)
+                #     return jsonify({'message': 'Error in adding employee,Try again'}), 500
+                training_thread = threading.Thread(target=train_model_in_thread)
+                training_thread.start()
+                return jsonify({'message': 'Gust added Successfully'}), 200
+            else:
+                return jsonify({'message': 'Error in adding guest,Try again'}), 500
+        except Exception as e:
+            return jsonify({'message': str(e)}), 500
+def get_all_guest():
+    with DBHandler.return_session() as session:
+        try:
+            guests=session.query(Employee).filter(Employee.is_guest==1).all()
+            serialize = []
+            print(f"guests ==>> {guests}")
+            for employee in guests:
+                print(f"employee ==>> {employee.id} {employee.name}")
+
+                images = session.query(EmployeeImages.image_url).filter(
+                    EmployeeImages.employee_id == employee.id).all()
+                image_urls = [image[0] for image in images]
+                serialize.append({
+                    'employee_id': employee.id,
+                    'name': employee.name,
+                    'image': image_urls[0]
+                })
+            return jsonify(serialize), 200
         except Exception as e:
             return jsonify({'message': str(e)}), 500

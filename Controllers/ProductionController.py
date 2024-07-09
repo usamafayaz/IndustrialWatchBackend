@@ -383,7 +383,7 @@ def calculate_yield(batchnumber, total_products, defected_products):
             if status_code != 200:
                 raise Exception(f"Failed to retrieve batch details: {detail_response.get('message', 'Unknown error')}")
             detail = json.loads(detail_response.data)
-            print(f'total items>{detail['total_piece']}')
+            print(f'total items>{detail["total_piece"]}')
             batch = session.query(Batch).filter(Batch.batch_number == batchnumber).first()
             batch.batch_yield = ((detail['total_piece'] - defected_products) / detail['total_piece']) * 100
             batch.defected_pieces = defected_products
