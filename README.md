@@ -35,12 +35,12 @@ This project is a group effort with multiple front-end implementations to ensure
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/usamafayaz/IndustrialWatchFYPBackend.git
+    git clone https://github.com/usamafayaz/IndustrialWatchBackend.git
     ```
 
 2. Navigate to the project directory:
     ```bash
-    cd IndustrialWatchFYPBackend
+    cd IndustrialWatchBackend
     ```
 
 3. Install Python dependencies:
@@ -57,4 +57,4 @@ This project is a group effort with multiple front-end implementations to ensure
     ```
 
 ## Contact
-For any inquiries or support, please contact [usama.fayyaz157@gmail.com].
+For any inquiries or support, please contact [abdullahmustafa3607@gmail.com] or [usama.fayyaz157@gmail.com].
