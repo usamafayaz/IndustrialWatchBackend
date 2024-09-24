@@ -60,8 +60,8 @@ This project is a group effort with multiple front-end implementations to ensure
 For any inquiries or support, please contact [abdullahmustafa3607@gmail.com] or [usama.fayyaz157@gmail.com].
 
 
-![Alt text](./images/Slide_1.png)
+<img src="./images/Slide_1.png" alt="Slide 1" style="border-radius: 20px;" />
 
-![Alt text](./images/Slide_2.png)
+<img src="./images/Slide_2.png" alt="Slide 2" style="border-radius: 20px;" />
 
-![Alt text](./images/Slide_3.png)
+<img src="./images/Slide_3.png" alt="Slide 3" style="border-radius: 20px;" />
