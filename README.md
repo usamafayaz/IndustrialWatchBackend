@@ -60,8 +60,12 @@ This project is a group effort with multiple front-end implementations to ensure
 For any inquiries or support, please contact [abdullahmustafa3607@gmail.com] or [usama.fayyaz157@gmail.com].
 
 
-<img src="./images/Slide_1.png" alt="Slide 1" style="border-radius: 20px;" />
-
-<img src="./images/Slide_2.png" alt="Slide 2" style="border-radius: 20px;" />
-
-<img src="./images/Slide_3.png" alt="Slide 3" style="border-radius: 20px;" />
+<div style="border-radius: 10px; overflow: hidden; width: fit-content;">
+  <img src="./images/Slide_1.png" alt="Slide 1" />
+</div>
+<div style="border-radius: 10px; overflow: hidden; width: fit-content;">
+  <img src="./images/Slide_2.png" alt="Slide 2" />
+</div>
+<div style="border-radius: 10px; overflow: hidden; width: fit-content;">
+  <img src="./images/Slide_3.png" alt="Slide 3" />
+</div>
