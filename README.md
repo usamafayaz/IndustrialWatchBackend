@@ -58,3 +58,10 @@ This project is a group effort with multiple front-end implementations to ensure
 
 ## Contact
 For any inquiries or support, please contact [abdullahmustafa3607@gmail.com] or [usama.fayyaz157@gmail.com].
+
+
+![Alt text](./images/Slide_1.png)
+
+![Alt text](./images/Slide_2.png)
+
+![Alt text](./images/Slide_3.png)
